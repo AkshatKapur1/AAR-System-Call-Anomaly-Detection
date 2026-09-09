@@ -1,0 +1,37 @@
+{
+  "input_file": "C:\\Users\\Akshat Kapur\\Downloads\\train_windows_n7.jsonl\\train_windows_n7.jsonl",
+  "total_lines_in_source": 8771179,
+  "vocab_size": 222,
+  "train_sample_size": 500000,
+  "held_out_sample_size": 47265,
+  "architecture": {
+    "type": "GRU (next-syscall prediction)",
+    "embed_dim": 32,
+    "hidden_dim": 64,
+    "num_layers": 1,
+    "n_params": 40350
+  },
+  "epochs": 5,
+  "batch_size": 512,
+  "learning_rate": 0.001,
+  "epoch_train_losses": [
+    1.2496657042688821,
+    0.7296846095956824,
+    0.6861172632038777,
+    0.668104695566113,
+    0.657568692733956
+  ],
+  "final_train_loss": 0.657568692733956,
+  "train_time_seconds": 84.0,
+  "held_out_scoring_time_seconds": 0.21,
+  "held_out_nll": {
+    "mean": 0.6469963704553312,
+    "std": 0.7630835428962058,
+    "min": 0.0017455226043239236,
+    "max": 8.425244331359863,
+    "p05": 0.0017455226043239236,
+    "p50": 0.4014509618282318,
+    "p95": 2.1896392822265622
+  },
+  "caveat": "No attack-labeled data was available in this handoff (only train_windows_n7.jsonl, benign windows). These are convergence and held-out-loss diagnostics, not detection accuracy. Real precision/recall/F1/AUC requires scoring a labeled benign+attack test set through this same model. Score direction note: this is negative log-likelihood loss (same convention as the LSTM track) \u2014 HIGHER = more surprising = more anomalous. Opposite direction from the HMM track's raw log-likelihood; see held_out_window_scores_hmm_format.csv for a sign-matched version."
+}
