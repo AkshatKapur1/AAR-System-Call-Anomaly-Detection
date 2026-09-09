@@ -1,0 +1,15 @@
+Using device: cpu
+Sampling 500000 training windows and 50000 held-out windows from 8771179 total...
+  sampled in 2.4s (train=(500000, 7), held_out=(47265, 7))
+Training LSTM: embed_dim=32, hidden_dim=64, layers=1, epochs=5, batch_size=512, on 500000 windows...
+  epoch 1/5  avg_loss=1.3711  (9.6s elapsed)
+  epoch 2/5  avg_loss=0.7519  (19.0s elapsed)
+  epoch 3/5  avg_loss=0.6982  (28.4s elapsed)
+  epoch 4/5  avg_loss=0.6757  (37.9s elapsed)
+  epoch 5/5  avg_loss=0.6627  (47.2s elapsed)
+  training finished in 47.2s
+Scoring held-out windows (never seen during training)...
+
+Saved model -> C:\Users\Akshat Kapur\projects\AAR\models\lstm\code\..\results\lstm_model.pt
+Saved report -> C:\Users\Akshat Kapur\projects\AAR\models\lstm\code\..\results\training_report.json
+Saved held-out scores -> C:\Users\Akshat Kapur\projects\AAR\models\lstm\code\..\results\held_out_window_scores.csv
