@@ -20,7 +20,11 @@ Protocol (same discipline as Layer 4 — FINAL is never used for a choice):
      benign TUNE recordings killed; ties -> fewer syscalls before the kill.
   5. Alert threshold: max Youden's J (attacks alerted % + benign not alerted %)
      on TUNE; alert_low = alert_high - HYSTERESIS_GAP (fixed in advance).
-  6. FINAL: kills, false kills, alerts, syscalls executed before the kill,
+  6. Alert escalation: kill a process whose alert has stayed on for more
+     than E windows in a row. E per dataset = a percentile of the longest
+     continuous alert over benign val processes; the percentile (or no
+     escalation) is chosen on TUNE with the same rule as step 4.
+  7. FINAL: kills (by reason), false kills, alerts, syscalls executed before the kill,
      alert flapping with vs without hysteresis, per dataset / attack type,
      against Layer 4's whole-recording decisions.
 
@@ -54,6 +58,7 @@ SUSTAINS = [1, 5, 10, 25, 50, 100]
 KILL_PERCENTILE = 99.0          # ~1% of benign val recordings ever killed
 MAX_TUNE_FALSE_KILL = 0.02
 HYSTERESIS_GAP = 0.25           # alert_low = alert_high - gap (z units)
+ESCALATE_PERCENTILES = [None, 99.5, 99, 98, 97, 95, 90]   # None = no escalation
 NEG = -1e9
 
 COLORS = {"attack": "#eb6834", "benign": "#2a78d6"}
@@ -117,6 +122,20 @@ def alert_raises(c, high, low):
         elif on and v < low:
             on = False
     return raises
+
+
+def alert_runs(c, high, low):
+    """Per window: how many consecutive windows the alert (with hysteresis)
+    has been on, 0 while it is off. Same state machine as KillSwitch."""
+    runs, on, run = np.zeros(len(c), dtype=np.int64), False, 0
+    for t, v in enumerate(c):
+        if not on and v > high:
+            on = True
+        elif on and v < low:
+            on = False
+        run = run + 1 if on else 0
+        runs[t] = run
+    return runs
 
 
 def first_alert(c, high):
@@ -241,11 +260,55 @@ def main():
     alert_high = youden_cutoff(ty, np.array([r["c"].max() for r in tune]))
     alert_low = alert_high - HYSTERESIS_GAP
 
-    # ---- 6. FINAL
+    # ---- 6. alert escalation: calibrate on benign val, choose on TUNE
+    for r in val + test:
+        r["runs"] = alert_runs(r["c"], alert_high, alert_low)
+        r["conf_kill"] = kill_window(r["c"], sustain, kill_thr[r["dataset"]])
+
+    def escalation_window(r, esc):
+        if not esc:
+            return None
+        idx = np.flatnonzero(r["runs"] > esc[r["dataset"]])
+        return int(idx[0]) if len(idx) else None
+
+    def kill_at(r, esc):
+        times = [t for t in (r["conf_kill"], escalation_window(r, esc)) if t is not None]
+        return min(times) if times else None
+
+    escalation_rows, best_esc = [], None
+    for pct in ESCALATE_PERCENTILES:
+        esc = None if pct is None else {
+            d: float(max(sustain, round(np.percentile([r["runs"].max() for r in val if r["dataset"] == d], pct))))
+            for d in datasets}
+        k_t = [kill_at(r, esc) for r in tune]
+        att = [t for r, t in zip(tune, k_t) if r["label"] == "attack"]
+        ben = [t for r, t in zip(tune, k_t) if r["label"] == "benign"]
+        row = {"escalate_percentile": "off" if pct is None else pct,
+               "escalate_after_windows": "" if esc is None else "; ".join(f"{d} {v:.0f}" for d, v in esc.items()),
+               "val_benign_kill_rate": float(np.mean([kill_at(r, esc) is not None for r in val])),
+               "tune_attacks_killed": sum(t is not None for t in att), "tune_attacks": len(att),
+               "tune_benign_killed": sum(t is not None for t in ben), "tune_benign": len(ben),
+               "tune_median_syscalls_before_kill": float(np.median([t + N for t in att if t is not None])),
+               "selected": False}
+        row["tune_benign_kill_rate"] = row["tune_benign_killed"] / row["tune_benign"]
+        row["_esc"] = esc
+        escalation_rows.append(row)
+        if row["tune_benign_kill_rate"] <= MAX_TUNE_FALSE_KILL and (
+                best_esc is None or row["tune_attacks_killed"] > best_esc["tune_attacks_killed"]
+                or (row["tune_attacks_killed"] == best_esc["tune_attacks_killed"]
+                    and row["tune_median_syscalls_before_kill"] < best_esc["tune_median_syscalls_before_kill"])):
+            best_esc = row
+    best_esc["selected"] = True
+    escalate = best_esc["_esc"]
+    print(f"Escalation: percentile {best_esc['escalate_percentile']} -> TUNE kills {best_esc['tune_attacks_killed']}/"
+          f"{best_esc['tune_attacks']}, normal killed {best_esc['tune_benign_killed']}/{best_esc['tune_benign']}")
+
+    # ---- 7. FINAL
     log = []
     for r in final:
         c, d = r["c"], r["dataset"]
-        kw = kill_window(c, sustain, kill_thr[d])
+        kw = kill_at(r, escalate)
+        reason = "" if kw is None else ("confidence" if kw == r["conf_kill"] else "escalation")
         fa = first_alert(c, alert_high)
         log.append({
             "record_index": r["record_index"], "recording_id": r["recording_id"], "dataset": d,
@@ -254,7 +317,8 @@ def main():
             "alerted": fa is not None, "first_alert_syscall": (fa + N) if fa is not None else "",
             "alert_raises_with_hysteresis": alert_raises(c, alert_high, alert_low),
             "alert_raises_without_hysteresis": alert_raises(c, alert_high, alert_high),
-            "killed": kw is not None, "kill_syscall": (kw + N) if kw is not None else "",
+            "killed": kw is not None, "kill_reason": reason, "kill_syscall": (kw + N) if kw is not None else "",
+            "killed_without_escalation": r["conf_kill"] is not None,
             "share_of_recording_before_kill": ((kw + N) / len(r["token_ids"])) if kw is not None else "",
             "peak_confidence": float(c.max()),
         })
@@ -267,6 +331,10 @@ def main():
         return {
             "attacks": len(att), "benign": len(ben),
             "attacks_killed": sum(r["killed"] for r in att), "benign_killed": sum(r["killed"] for r in ben),
+            "attacks_killed_by_escalation": sum(r["kill_reason"] == "escalation" for r in att),
+            "benign_killed_by_escalation": sum(r["kill_reason"] == "escalation" for r in ben),
+            "attacks_killed_without_escalation": sum(r["killed_without_escalation"] for r in att),
+            "benign_killed_without_escalation": sum(r["killed_without_escalation"] for r in ben),
             "attack_kill_rate": (sum(r["killed"] for r in att) / len(att)) if att else float("nan"),
             "benign_false_kill_rate": (sum(r["killed"] for r in ben) / len(ben)) if ben else float("nan"),
             "attacks_alerted": sum(r["alerted"] for r in att), "benign_alerted": sum(r["alerted"] for r in ben),
@@ -291,6 +359,8 @@ def main():
         s = summarise(rows)
         per_attack.append({"dataset": d, "attack_type": at, "n_attack": len(rows),
                            "killed": s["attacks_killed"], "kill_rate": s["attack_kill_rate"],
+                           "killed_by_escalation": s["attacks_killed_by_escalation"],
+                           "killed_without_escalation": s["attacks_killed_without_escalation"],
                            "alerted": s["attacks_alerted"], "alert_rate": s["attack_alert_rate"],
                            "median_syscalls_before_kill": s["median_syscalls_before_kill"]})
 
@@ -299,7 +369,8 @@ def main():
     for r, row in list(zip(final, log))[:300]:
         st = norm[r["dataset"]]
         ks = KillSwitch(alpha, sustain, Thresholds(st["median"], st["p99"], alert_high, alert_low,
-                                                   kill_thr[r["dataset"]]))
+                                                   kill_thr[r["dataset"]],
+                                                   int(escalate[r["dataset"]]) if escalate else 0))
         raises = 0
         for s in r["s"]:
             ev = ks.update(float(s))
@@ -314,7 +385,8 @@ def main():
     if demo_rec is not None:
         st = norm[demo_rec["dataset"]]
         demo_result = demo(demo_rec["s"], alpha, sustain,
-                           Thresholds(st["median"], st["p99"], alert_high, alert_low, kill_thr[demo_rec["dataset"]]))
+                           Thresholds(st["median"], st["p99"], alert_high, alert_low, kill_thr[demo_rec["dataset"]],
+                                      int(escalate[demo_rec["dataset"]]) if escalate else 0))
         demo_result = {"recording_id": demo_rec["recording_id"], "attack_type": demo_rec["attack_type"],
                        **{k: v for k, v in demo_result.items() if k != "events"},
                        "events": [list(e) for e in demo_result["events"]]}
@@ -327,6 +399,9 @@ def main():
     for row in tuning:
         row.pop("_kill_thr")
     write_csv("tuning_results.csv", tuning)
+    for row in escalation_rows:
+        row.pop("_esc")
+    write_csv("escalation_tuning.csv", escalation_rows)
     write_json("calibration.json", {
         "model": best["best_model"], "mode": "stream",
         "window_normalisation_from_benign_val": norm,
@@ -335,6 +410,10 @@ def main():
         "kill_calibration": f"{KILL_PERCENTILE}th percentile of benign val sustained peak confidence",
         "alert_high_z": alert_high, "alert_low_z": alert_low, "hysteresis_gap": HYSTERESIS_GAP,
         "alert_calibration": "max Youden's J on TUNE (peak confidence)",
+        "escalate_after_windows_per_dataset": escalate,
+        "escalation_calibration": f"{best_esc['escalate_percentile']} percentile of the longest continuous alert "
+                                  "over benign val processes (min = sustain); percentile chosen on TUNE",
+        "escalation_selection_rule": f"most TUNE attacks killed with TUNE benign kill rate <= {MAX_TUNE_FALSE_KILL}",
         "selection_rule": f"most TUNE attacks killed with TUNE benign false-kill rate <= {MAX_TUNE_FALSE_KILL}; "
                           "ties -> fewer syscalls before kill",
     })

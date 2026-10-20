@@ -30,5 +30,8 @@
   "alert_low_z": 0.08844339233973475,
   "hysteresis_gap": 0.25,
   "alert_calibration": "max Youden's J on TUNE (peak confidence)",
+  "escalate_after_windows_per_dataset": null,
+  "escalation_calibration": "off percentile of the longest continuous alert over benign val processes (min = sustain); percentile chosen on TUNE",
+  "escalation_selection_rule": "most TUNE attacks killed with TUNE benign kill rate <= 0.02",
   "selection_rule": "most TUNE attacks killed with TUNE benign false-kill rate <= 0.02; ties -> fewer syscalls before kill"
 }

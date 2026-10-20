@@ -5,6 +5,10 @@
   "benign": 583,
   "attacks_killed": 123,
   "benign_killed": 8,
+  "attacks_killed_by_escalation": 0,
+  "benign_killed_by_escalation": 0,
+  "attacks_killed_without_escalation": 123,
+  "benign_killed_without_escalation": 8,
   "attack_kill_rate": 0.1717877094972067,
   "benign_false_kill_rate": 0.0137221269296741,
   "attacks_alerted": 604,
@@ -28,7 +32,7 @@
   "live_demo": {
     "recording_id": "UAD-Hydra-FTP-1-3523",
     "attack_type": "Hydra_FTP",
-    "pid": 41648,
+    "pid": 10816,
     "killed_by_switch": true,
     "kill_window": 9,
     "events": [
@@ -38,7 +42,7 @@
         1.488458808080865
       ],
       [
-        "kill",
+        "kill:confidence",
         9,
         1.5963928189022816
       ]

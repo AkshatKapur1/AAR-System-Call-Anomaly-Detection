@@ -29,6 +29,8 @@ For every new 7-syscall window of a process:
    `c_t < alert_low = alert_high − 0.25`, so it does not flap on/off.
 5. **Kill** (confidence gate): when `c_t > kill` for **10 consecutive
    windows** — a single odd window can never kill a process. Final.
+   Optional **alert escalation**: also kill when the alert has stayed on for
+   more than `escalate_after` windows in a row (off by default — see below).
 6. **Action**: `terminate_process(pid)` — `SIGKILL` on Linux/macOS,
    `taskkill /F` on Windows.
 
@@ -40,6 +42,7 @@ For every new 7-syscall window of a process:
 | Kill threshold per dataset | 99th percentile of the highest *sustained* confidence over benign val processes (~1% of normal val processes would ever be killed) | ADFA-LD 1.16, LID-DS 0.95, PLAID 1.12 |
 | Confidence type (α) and sustain | grid α ∈ {running mean, 0.01 … 0.5} × sustain ∈ {1, 5, 10, 25, 50, 100}, picked on **TUNE**: most attacks killed with ≤ 2% TUNE false kills | running mean, 10 windows |
 | Alert threshold | max Youden's J (attacks alerted % + normal not alerted %) on **TUNE** | high 0.338, low 0.088 |
+| Alert escalation | `escalate_after` per dataset = a percentile (99.5 … 90) of the longest continuous alert over benign val processes; percentile or *off* picked on **TUNE** with the same ≤ 2% false-kill rule | **off** |
 
 ## Results on FINAL (583 normal, 716 attack processes)
 
@@ -68,6 +71,27 @@ For every new 7-syscall window of a process:
 - Check: the vectorised simulation and the `KillSwitch` class give identical
   kill decisions and kill times on 300 / 300 FINAL processes.
 
+### Alert escalation (option tested, not adopted)
+
+Idea: an attack that stays alerted for a long time should eventually be
+killed. Result on TUNE (306 attacks, 251 normal processes):
+
+| Escalation | Attacks killed | Normal killed | Within ≤ 2% false kills |
+|---|---|---|---|
+| **off (selected)** | **46** | **5 (2.0%)** | yes |
+| 99.5th pct | 48 (+2) | 7 (2.8%) | no |
+| 98th pct | 64 (+18) | 11 (4.4%) | no |
+| 95th pct | 90 (+44) | 16 (6.4%) | no |
+| 90th pct | 135 (+89) | 29 (11.6%) | no |
+
+Many normal processes also stay alerted for long stretches, so a long alert
+alone is weak evidence: every extra attack killed costs roughly one extra
+normal process. Escalation therefore only trades false kills for kills (like
+loosening the kill budget) and stays **off**; FINAL results are unchanged.
+It remains available as a policy switch (`Thresholds.escalate_after`) for
+low-risk services where more false kills are acceptable; all settings are in
+`escalation_tuning.csv`.
+
 ### Disclosure — first run
 
 The first run offered only EWMA confidence. On FINAL it stopped 62 / 716
@@ -84,7 +108,8 @@ only. Both families are in `tuning_results.csv`.
 |---|---|
 | `calibration.json` | normalisation, kill thresholds per dataset, alert thresholds, chosen α / sustain |
 | `tuning_results.csv` | all 42 (α, sustain) settings on TUNE + val false-kill rate |
-| `kill_log.csv` | one row per FINAL process: alerted / first alert syscall, killed / kill syscall, alert raises with & without hysteresis |
+| `escalation_tuning.csv` | alert-escalation settings on TUNE (off selected) |
+| `kill_log.csv` | one row per FINAL process: alerted / first alert syscall, killed / kill reason / kill syscall, alert raises with & without hysteresis |
 | `per_dataset.csv`, `per_attack_type.csv` | kills, false kills, alerts, time to kill |
 | `response_summary.json` | totals, hysteresis effect, Layer 4 comparison, live demo |
 | `plots/example_timelines.png` | confidence over time for an attack (killed) and a normal process |

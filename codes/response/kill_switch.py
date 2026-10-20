@@ -14,7 +14,10 @@ them, and decides per process:
   ALERT   raised when c_t > alert_high, cleared only when c_t < alert_low
           (hysteresis: alert_low < alert_high, so the alert does not flap).
   KILL    when c_t > kill for `sustain` consecutive windows (confidence gate:
-          a single odd window can never kill a process). Kill is final.
+          a single odd window can never kill a process), OR
+          ESCALATION: when the alert has stayed on for more than
+          `escalate_after` consecutive windows - longer than almost any normal
+          process ever stays alerted. Kill is final.
 
 All parameters come from codes/response/simulate_response.py: thresholds are
 calibrated on benign val, alpha / sustain / alert level are chosen on the
@@ -35,6 +38,7 @@ class Thresholds:
     alert_high: float
     alert_low: float
     kill: float
+    escalate_after: int = 0     # 0 = no escalation
 
 
 @dataclass
@@ -50,6 +54,8 @@ class KillSwitch:
     window: int = -1
     run_above_kill: int = 0
     z_sum: float = 0.0
+    alert_run: int = 0
+    kill_reason: str = ""
     events: list = field(default_factory=list)
 
     def update(self, window_score):
@@ -66,22 +72,28 @@ class KillSwitch:
             self.confidence = (1 - self.alpha) * self.confidence + self.alpha * z
         self.run_above_kill = self.run_above_kill + 1 if self.confidence > t.kill else 0
         if self.run_above_kill >= self.sustain:
-            self.killed = True
-            self.events.append(("kill", self.window, self.confidence))
-            if self.on_kill:
-                self.on_kill(self)
-            return "kill"
+            return self._kill("confidence")
+        event = None
         if not self.alert and self.confidence > t.alert_high:
-            self.alert = True
+            self.alert, event = True, "alert"
             self.events.append(("alert", self.window, self.confidence))
             if self.on_alert:
                 self.on_alert(self)
-            return "alert"
-        if self.alert and self.confidence < t.alert_low:
-            self.alert = False
+        elif self.alert and self.confidence < t.alert_low:
+            self.alert, event = False, "clear"
             self.events.append(("clear", self.window, self.confidence))
-            return "clear"
-        return None
+        self.alert_run = self.alert_run + 1 if self.alert else 0
+        if t.escalate_after and self.alert_run > t.escalate_after:
+            return self._kill("escalation")
+        return event
+
+    def _kill(self, reason):
+        self.killed = True
+        self.kill_reason = reason
+        self.events.append(("kill:" + reason, self.window, self.confidence))
+        if self.on_kill:
+            self.on_kill(self)
+        return "kill"
 
 
 def terminate_process(pid):
