@@ -1,0 +1,122 @@
+{
+  "n": 7,
+  "vocab_size": 222,
+  "score_direction": "higher = more anomalous (all models)",
+  "window_score": {
+    "hmm": "-log P(7-syscall window) via forward algorithm",
+    "gru": "mean NLL of predicting syscalls 2..7 within the window",
+    "lstm": "mean NLL of predicting syscalls 2..7 within the window"
+  },
+  "record_score": "score = score_top5 = mean of the top 5% most anomalous windows in the record (fixed in advance, not tuned)",
+  "verification_against_training_held_out": {
+    "hmm": {
+      "held_out_windows_rebuilt": 48979,
+      "stored_scores": 48979,
+      "max_abs_diff": 7.105427357601002e-15,
+      "passed": true
+    },
+    "gru": {
+      "held_out_windows_rebuilt": 47265,
+      "stored_scores": 47265,
+      "max_abs_diff": 4.76837158203125e-07,
+      "passed": true
+    },
+    "lstm": {
+      "held_out_windows_rebuilt": 47265,
+      "stored_scores": 47265,
+      "max_abs_diff": 0.0,
+      "passed": true
+    }
+  },
+  "splits": {
+    "val": {
+      "records": 833,
+      "records_by_label": {
+        "benign": 833,
+        "attack": 0
+      },
+      "windows": 1719403,
+      "records_with_no_windows (<7 syscalls, score=NaN)": [
+        681
+      ],
+      "unk_rate": {
+        "benign": 5.799131985924347e-07,
+        "attack": null
+      }
+    },
+    "test": {
+      "records": 1860,
+      "records_by_label": {
+        "benign": 834,
+        "attack": 1026
+      },
+      "windows": 3370804,
+      "records_with_no_windows (<7 syscalls, score=NaN)": [
+        1718,
+        1752,
+        1753,
+        1759
+      ],
+      "unk_rate": {
+        "benign": 4.849241918010957e-07,
+        "attack": 0.006228324936712793
+      }
+    }
+  },
+  "models": {
+    "hmm": {
+      "model_file": "models/HMM/hmm_model.pkl",
+      "model_file_kb": 20.6,
+      "n_parameters": 1848,
+      "inference": {
+        "val": {
+          "windows": 1719403,
+          "seconds": 11.84,
+          "ms_per_1000_windows": 6.885
+        },
+        "test": {
+          "windows": 3370804,
+          "seconds": 23.05,
+          "ms_per_1000_windows": 6.838
+        }
+      }
+    },
+    "gru": {
+      "model_file": "models/gru/results/gru_model.pt",
+      "model_file_kb": 160.9,
+      "n_parameters": 40350,
+      "inference": {
+        "val": {
+          "windows": 1719403,
+          "seconds": 4.71,
+          "ms_per_1000_windows": 2.74
+        },
+        "test": {
+          "windows": 3370804,
+          "seconds": 9.03,
+          "ms_per_1000_windows": 2.679
+        }
+      }
+    },
+    "lstm": {
+      "model_file": "models/lstm/results/lstm_model.pt",
+      "model_file_kb": 185.4,
+      "n_parameters": 46622,
+      "inference": {
+        "val": {
+          "windows": 1719403,
+          "seconds": 4.55,
+          "ms_per_1000_windows": 2.644
+        },
+        "test": {
+          "windows": 3370804,
+          "seconds": 8.88,
+          "ms_per_1000_windows": 2.635
+        }
+      }
+    }
+  },
+  "peak_memory_mb": 1010.6,
+  "device": "cpu",
+  "torch_threads": 16
+}
