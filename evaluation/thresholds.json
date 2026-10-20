@@ -1,0 +1,22 @@
+{
+  "source": "benign val record scores (scoring/*_val_record_scores.csv, column `score`)",
+  "rule": "flag as attack when score > threshold",
+  "primary": "p99",
+  "thresholds": {
+    "hmm": {
+      "p95": 42.75906256316185,
+      "p99": 48.195064943610866,
+      "p99_5": 50.10430589303161
+    },
+    "gru": {
+      "p95": 5.439955217838287,
+      "p99": 6.526681333303439,
+      "p99_5": 7.092015337308253
+    },
+    "lstm": {
+      "p95": 5.402056984504063,
+      "p99": 6.3509221875229365,
+      "p99_5": 6.691396295626959
+    }
+  }
+}

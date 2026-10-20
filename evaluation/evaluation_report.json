@@ -1,0 +1,35 @@
+{
+  "test_records": {
+    "hmm": 1860,
+    "gru": 1860,
+    "lstm": 1860
+  },
+  "excluded_nan_scores": {
+    "hmm": {
+      "val": 1,
+      "test": 4
+    },
+    "gru": {
+      "val": 1,
+      "test": 4
+    },
+    "lstm": {
+      "val": 1,
+      "test": 4
+    }
+  },
+  "test_composition": {
+    "benign": 834,
+    "attack": 1022
+  },
+  "percentiles": {
+    "p95": 95.0,
+    "p99": 99.0,
+    "p99_5": 99.5
+  },
+  "primary_threshold": "p99",
+  "bootstrap_resamples_for_auc_ci": 1000,
+  "seed": 42,
+  "peak_memory_mb_during_scoring": 1470.0,
+  "best_model": "lstm"
+}

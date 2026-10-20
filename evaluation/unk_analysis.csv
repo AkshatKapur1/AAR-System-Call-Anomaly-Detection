@@ -1,0 +1,10 @@
+model,attack_subset,n_attack,roc_auc,recall_p99
+hmm,all_attacks,1022,0.527195,0.07045
+hmm,attacks_with_no_unk,993,0.516517,0.066465
+hmm,attacks_with_unk,29,0.892831,0.206897
+gru,all_attacks,1022,0.67173,0.11546
+gru,attacks_with_no_unk,993,0.662596,0.093656
+gru,attacks_with_unk,29,0.984495,0.862069
+lstm,all_attacks,1022,0.664723,0.1409
+lstm,attacks_with_no_unk,993,0.65545,0.118832
+lstm,attacks_with_unk,29,0.982262,0.896552
