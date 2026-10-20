@@ -1,11 +1,14 @@
 """
-Layer 3 completion: score the val and test splits with the three trained
-models (HMM, GRU, LSTM) and write one anomaly score per recording.
+Layer 3 completion: score the train, val and test splits with the three
+trained models (HMM, GRU, LSTM) and write one anomaly score per recording.
 
-Input : split/val.jsonl.gz, split/test.jsonl.gz (token_ids already encoded
-        with split/vocab.json), plus the trained models under models/.
-Output: scoring/{hmm,gru,lstm}_{val,test}_record_scores.csv and
+Input : split/{train,val,test}.jsonl.gz (token_ids already encoded with
+        split/vocab.json), plus the trained models under models/.
+Output: scoring/{hmm,gru,lstm}_{train,val,test}_record_scores.csv and
         scoring/scoring_report.json.
+
+Train scores are for comparing against val (overfitting check) only — the
+models were fit on samples of these windows, so they are not detection results.
 
 Windowing is identical to codes/feature_extraction/extract_features.py
 (n=7 sliding window per record, never crossing a record boundary) — applied
@@ -309,7 +312,7 @@ def main():
                           "inference": {}} for name in scorers},
     }
 
-    for split in ("val", "test"):
+    for split in ("train", "val", "test"):
         print(f"Loading split/{split}.jsonl.gz ...")
         records = load_split(split)
         windows, offsets = build_windows(records)

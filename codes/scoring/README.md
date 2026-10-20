@@ -1,7 +1,7 @@
-# Layer 3 completion — scoring val/test with HMM, GRU, LSTM
+# Layer 3 completion — scoring train/val/test with HMM, GRU, LSTM
 
 Turns the three trained models into **one anomaly score per recording** for
-the val and test splits. Scores only — no thresholds, no metrics (that is
+the train, val and test splits. Scores only — no thresholds, no metrics (that is
 Layer 4).
 
 ## Run
@@ -11,7 +11,7 @@ python codes/scoring/score_models.py
 ```
 
 Needs `numpy`, `torch`, `hmmlearn`, `joblib`. Paths are relative to the repo
-root, so it runs on any machine. Takes ~2 minutes on CPU.
+root, so it runs on any machine. Takes ~4 minutes on CPU.
 
 ## What it does
 
@@ -19,10 +19,10 @@ root, so it runs on any machine. Takes ~2 minutes on CPU.
    training time from `feature_extraction/train_windows_n7.jsonl.gz`,
    rescores them, and checks they match the stored
    `held_out_window_scores*.csv` in `models/`. Stops if they don't.
-2. **Windows val and test** — same n=7 sliding window as
+2. **Windows train, val and test** — same n=7 sliding window as
    `codes/feature_extraction/extract_features.py` (via `ngram_utils.sliding_windows`),
-   never crossing a record boundary. Applied to `split/train.jsonl.gz` this
-   reproduces all 8,771,179 training windows. Windows are built in memory,
+   never crossing a record boundary. On `split/train.jsonl.gz` this
+   reproduces exactly the 8,771,179 windows in `train_windows_n7.jsonl.gz`. Windows are built in memory,
    not saved.
 3. **Scores every window** — higher = more anomalous for all models:
    - HMM: `-log P(window)` (batched forward algorithm, same maths as `model.score()`)
@@ -37,6 +37,7 @@ root, so it runs on any machine. Takes ~2 minutes on CPU.
 
 | File | Contents |
 |---|---|
+| `{hmm,gru,lstm}_train_record_scores.csv` | 3,888 benign train recordings — for the overfitting check only, **not** detection results (the models were fit on samples of these windows) |
 | `{hmm,gru,lstm}_val_record_scores.csv` | 833 benign val recordings |
 | `{hmm,gru,lstm}_test_record_scores.csv` | 1,860 test recordings (834 benign, 1,026 attack) |
 | `scoring_report.json` | verification results, window counts, UNK rates, inference time, model size, peak memory |
@@ -45,16 +46,28 @@ CSV columns:
 
 | Column | Meaning |
 |---|---|
-| `record_index` | line number in `split/{val,test}.jsonl.gz` — unique key (some LID-DS `recording_id`s appear twice in test: pre-exploit benign part + attack part) |
+| `record_index` | line number in `split/{train,val,test}.jsonl.gz` — unique key (some LID-DS `recording_id`s appear twice in test: pre-exploit benign part + attack part) |
 | `recording_id`, `source`, `source_split`, `label`, `attack_type` | copied from the split file (labels are not used here, only passed on to Layer 4) |
 | `n_syscalls`, `n_windows` | record length and number of 7-gram windows |
 | `unk_rate` | fraction of syscalls not in the training vocabulary (`<UNK>`) |
 | `score_mean`, `score_max`, `score_top5` | window scores aggregated three ways |
 | `score` | primary record score (= `score_top5`) |
 
+## Median record score (`score`)
+
+| Model | train benign | val benign | test benign | test attack |
+|---|---|---|---|---|
+| HMM  | 32.15 | 32.15 | 32.13 | 33.83 |
+| GRU  | 3.25 | 3.28 | 3.28 | 4.42 |
+| LSTM | 3.24 | 3.27 | 3.26 | 4.39 |
+
+Train ≈ val ≈ test-benign → no sign of overfitting; val is a fair stand-in
+for normal behaviour when setting thresholds. Attacks score higher for all
+three models. (Medians only — detection metrics are Layer 4.)
+
 ## Notes for Layer 4
 
-- 1 val and 4 test records have fewer than 7 syscalls → no windows →
+- 3 train, 1 val and 4 test records have fewer than 7 syscalls → no windows →
   scores are `NaN`. Listed in `scoring_report.json`.
 - HMM scores (sum over 7 syscalls) and GRU/LSTM scores (mean over 6
   predictions) are on different scales — compare models by ranking metrics

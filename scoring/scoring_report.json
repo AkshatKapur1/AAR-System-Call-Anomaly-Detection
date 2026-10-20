@@ -29,6 +29,23 @@
     }
   },
   "splits": {
+    "train": {
+      "records": 3888,
+      "records_by_label": {
+        "benign": 3888,
+        "attack": 0
+      },
+      "windows": 8771179,
+      "records_with_no_windows (<7 syscalls, score=NaN)": [
+        3598,
+        3699,
+        3813
+      ],
+      "unk_rate": {
+        "benign": 0.0,
+        "attack": null
+      }
+    },
     "val": {
       "records": 833,
       "records_by_label": {
@@ -69,15 +86,20 @@
       "model_file_kb": 20.6,
       "n_parameters": 1848,
       "inference": {
+        "train": {
+          "windows": 8771179,
+          "seconds": 70.76,
+          "ms_per_1000_windows": 8.067
+        },
         "val": {
           "windows": 1719403,
-          "seconds": 11.84,
-          "ms_per_1000_windows": 6.885
+          "seconds": 11.76,
+          "ms_per_1000_windows": 6.839
         },
         "test": {
           "windows": 3370804,
-          "seconds": 23.05,
-          "ms_per_1000_windows": 6.838
+          "seconds": 25.6,
+          "ms_per_1000_windows": 7.596
         }
       }
     },
@@ -86,15 +108,20 @@
       "model_file_kb": 160.9,
       "n_parameters": 40350,
       "inference": {
+        "train": {
+          "windows": 8771179,
+          "seconds": 23.62,
+          "ms_per_1000_windows": 2.693
+        },
         "val": {
           "windows": 1719403,
-          "seconds": 4.71,
-          "ms_per_1000_windows": 2.74
+          "seconds": 4.76,
+          "ms_per_1000_windows": 2.768
         },
         "test": {
           "windows": 3370804,
-          "seconds": 9.03,
-          "ms_per_1000_windows": 2.679
+          "seconds": 11.15,
+          "ms_per_1000_windows": 3.308
         }
       }
     },
@@ -103,20 +130,25 @@
       "model_file_kb": 185.4,
       "n_parameters": 46622,
       "inference": {
+        "train": {
+          "windows": 8771179,
+          "seconds": 23.65,
+          "ms_per_1000_windows": 2.696
+        },
         "val": {
           "windows": 1719403,
-          "seconds": 4.55,
-          "ms_per_1000_windows": 2.644
+          "seconds": 4.56,
+          "ms_per_1000_windows": 2.651
         },
         "test": {
           "windows": 3370804,
-          "seconds": 8.88,
-          "ms_per_1000_windows": 2.635
+          "seconds": 9.14,
+          "ms_per_1000_windows": 2.713
         }
       }
     }
   },
-  "peak_memory_mb": 1010.6,
+  "peak_memory_mb": 1470.0,
   "device": "cpu",
   "torch_threads": 16
 }
