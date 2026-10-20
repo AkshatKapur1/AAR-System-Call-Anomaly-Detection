@@ -23,7 +23,15 @@
     "precision_p99": 0.9469026548672567,
     "recall_p99": 0.1494413407821229,
     "f1_p99": 0.25814234016887816,
-    "fpr_p99": 0.010291595197255575
+    "fpr_p99": 0.010291595197255575,
+    "attacks_caught_balanced": 638,
+    "normal_passed_balanced": 381,
+    "false_alarms_balanced": 202,
+    "precision_balanced": 0.7595238095238095,
+    "recall_balanced": 0.8910614525139665,
+    "f1_balanced": 0.8200514138817482,
+    "fpr_balanced": 0.346483704974271,
+    "balanced_accuracy": 0.7722888737698477
   },
   "for_layer5": {
     "model_file": "models/lstm/results/lstm_model.pt",
@@ -53,8 +61,17 @@
           "p99": 3.0880835314538277,
           "p99_5": 4.0815476190457165
         }
+      },
+      "balanced_alert": {
+        "z_cutoff": 0.10808252508774877,
+        "chosen_on": "TUNE, max Youden's J",
+        "score_cutoff_per_group": {
+          "ADFA-LD": 0.7467308740199619,
+          "LID-DS": 0.22414334750252138,
+          "PLAID": 0.46457578027614044
+        }
       }
     },
-    "note": "threshold per dataset = benign val percentile of the score column; z = (score - median) / (p99 - median), z > 1 == above p99"
+    "note": "z = (score - median) / (p99 - median) per dataset from benign val. Kill threshold: z > 1 (p99, ~1% false alarms). Alert threshold: z > thresholds.balanced_alert.z_cutoff (balanced, chosen on TUNE)."
   }
 }

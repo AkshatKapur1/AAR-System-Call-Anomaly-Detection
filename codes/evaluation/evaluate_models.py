@@ -23,6 +23,12 @@ Protocol — no decision ever looks at FINAL:
      bootstrap CI), PR-AUC, FPR@TPR=1/0.95, precision / recall / F1 / FPR at
      each threshold, per dataset / CVE / attack type, cost metrics, and a
      side-by-side with the v1 baseline on the same FINAL records.
+  4. Two operating points per model:
+       - "kill" (strict): p99 of benign val, ~1% false alarms — for the
+         Layer 5 kill switch, where a false alarm kills a legitimate process;
+       - "balanced alert": the z cutoff that maximises Youden's J
+         (attacks caught % + normal passed % - 1) on TUNE, applied once to
+         FINAL — catches most attacks while passing most normal recordings.
   The oracle best-F1 threshold on FINAL is reported as an upper bound only.
 
 Run from anywhere:  python codes/evaluation/evaluate_models.py
@@ -156,6 +162,15 @@ def oracle_best_f1(y, s):
     return float(np.max(np.where(p + r > 0, 2 * p * r / np.maximum(p + r, 1e-12), 0)))
 
 
+def balanced_cutoff(y, z):
+    """z cutoff maximising Youden's J = TPR - FPR (flag when z > cutoff);
+    placed midway between the chosen ROC threshold and the next one."""
+    fpr, tpr, thr = roc_curve(y, z)
+    i = int(np.argmax(tpr - fpr))
+    lower = thr[i + 1] if i + 1 < len(thr) else thr[i] - 1.0
+    return float((thr[i] + lower) / 2)
+
+
 def better(a, b):
     """Selection rule: higher AUC; within AUC_TIE, higher recall at p99."""
     if b is None:
@@ -254,6 +269,13 @@ def main():
             c = counts(y, decide(final, norm, col, level))
             by_level[level] = c
             threshold_rows.append({"model": m, "threshold_level": level, **c})
+        zb = balanced_cutoff(*arrays(data[m]["tune"], norm, col))
+        bal = counts(y, z > zb)
+        threshold_rows.append({"model": m, "threshold_level": "balanced_alert", **bal})
+        thresholds[m]["balanced_alert"] = {
+            "z_cutoff": zb, "chosen_on": "TUNE, max Youden's J",
+            "score_cutoff_per_group": {g: st["median"] + zb * (st[PRIMARY] - st["median"])
+                                       for g, st in norm.stats.items()}}
         tr = json.load(open(TRAINING_REPORTS[m], encoding="utf-8"))
         inf = scoring_report["models"][m]["inference"]["test"]
         p = by_level[PRIMARY]
@@ -266,6 +288,12 @@ def main():
             "attacks_caught_p99": p["tp"], "attacks_total": p["tp"] + p["fn"],
             "false_alarms_p99": p["fp"], "benign_total": p["fp"] + p["tn"],
             "precision_p99": p["precision"], "recall_p99": p["recall"], "f1_p99": p["f1"], "fpr_p99": p["fpr"],
+            "balanced_z_cutoff": zb,
+            "attacks_caught_balanced": bal["tp"], "normal_passed_balanced": bal["tn"],
+            "false_alarms_balanced": bal["fp"],
+            "precision_balanced": bal["precision"], "recall_balanced": bal["recall"],
+            "f1_balanced": bal["f1"], "fpr_balanced": bal["fpr"],
+            "balanced_accuracy": (bal["recall"] + 1 - bal["fpr"]) / 2,
             "oracle_best_f1_on_final": oracle_best_f1(y, z),
             "baseline_roc_auc": baseline["models"][m]["roc_auc"],
             "baseline_recall_p99": baseline["models"][m]["recall"],
@@ -275,7 +303,7 @@ def main():
             "n_parameters": scoring_report["models"][m]["n_parameters"],
             "model_file_kb": scoring_report["models"][m]["model_file_kb"],
         })
-        curves[m] = {"y": y, "z": z, "cm": p}
+        curves[m] = {"y": y, "z": z, "cm": p, "balanced": bal}
 
         for level_name, key in (("dataset", "dataset"), ("source", "source")):
             for g in sorted({r[key] for r in final}):
@@ -284,11 +312,14 @@ def main():
                 rows = [r for r in final if r[key] == g]
                 gy, gz = arrays(rows, norm, col)
                 c = counts(gy, decide(rows, norm, col, PRIMARY))
+                cb = counts(gy, gz > zb)
                 per_group.append({"model": m, "level": level_name, "group": g,
                                   "n_benign": int((gy == 0).sum()), "n_attack": int(gy.sum()),
                                   "roc_auc": safe_auc(gy, gz), "attacks_caught_p99": c["tp"],
                                   "recall_p99": c["recall"], "fpr_p99": c["fpr"],
                                   "precision_p99": c["precision"], "f1_p99": c["f1"],
+                                  "attacks_caught_balanced": cb["tp"], "normal_passed_balanced": cb["tn"],
+                                  "recall_balanced": cb["recall"], "fpr_balanced": cb["fpr"],
                                   "baseline_roc_auc": baseline["models"][m]["per_dataset"].get(g, {}).get("roc_auc", ""),
                                   "small_group": bool(gy.sum() < SMALL_GROUP)})
 
@@ -301,6 +332,7 @@ def main():
                    "median_z": float(np.median(az[ay == 1]))}
             for level in PERCENTILES:
                 row[f"recall_{level}"] = float(decide(att, norm, col, level).mean())
+            row["recall_balanced"] = float(np.mean(az[ay == 1] > zb))
             row["small_group"] = len(att) < SMALL_GROUP
             per_attack.append(row)
 
@@ -330,20 +362,28 @@ def main():
                           "threshold_scheme": sel["threshold_scheme"], "score_column": f"{sel['mode']}_{sel['aggregation']}"},
         "final_results": {k: fin[k] for k in ("roc_auc", "pr_auc", "attacks_caught_p99", "attacks_total",
                                               "false_alarms_p99", "benign_total", "precision_p99",
-                                              "recall_p99", "f1_p99", "fpr_p99")},
+                                              "recall_p99", "f1_p99", "fpr_p99",
+                                              "attacks_caught_balanced", "normal_passed_balanced",
+                                              "false_alarms_balanced", "precision_balanced",
+                                              "recall_balanced", "f1_balanced", "fpr_balanced",
+                                              "balanced_accuracy")},
         "for_layer5": {
             "model_file": scoring_report["models"][best_m]["model_file"],
             "score_files": {s: f"scoring/{best_m}_{s}_record_scores.csv" for s in ("val", "test")},
             "thresholds": thresholds[best_m],
-            "note": "threshold per dataset = benign val percentile of the score column; "
-                    "z = (score - median) / (p99 - median), z > 1 == above p99",
+            "note": "z = (score - median) / (p99 - median) per dataset from benign val. "
+                    "Kill threshold: z > 1 (p99, ~1% false alarms). Alert threshold: "
+                    "z > thresholds.balanced_alert.z_cutoff (balanced, chosen on TUNE).",
         },
     }
 
     print("Writing evaluation outputs...")
     write_csv("tuning_results.csv", tuning_rows)
     write_json("thresholds.json", {"source": "benign val record scores; flag when score > threshold",
-                                   "primary": PRIMARY, "models": thresholds})
+                                   "primary": PRIMARY,
+                                   "operating_points": {"kill": f"{PRIMARY} of benign val (~1% false alarms)",
+                                                        "balanced_alert": "max Youden's J on TUNE"},
+                                   "models": thresholds})
     write_csv("model_summary.csv", summary)
     write_csv("threshold_metrics.csv", threshold_rows)
     write_csv("per_dataset_metrics.csv", per_group)
@@ -376,6 +416,11 @@ def main():
         s = next(x for x in summary if x["model"] == m)
         ax.plot(fpr, tpr, color=COLORS[m], linewidth=2,
                 label=f"{MODEL_LABELS[m]}  AUC {s['roc_auc']:.3f} (v1 {s['baseline_roc_auc']:.3f})")
+        b = curves[m]["balanced"]
+        ax.plot(b["fpr"], b["recall"], "o", markersize=8, color=COLORS[m], markeredgecolor=SURFACE,
+                markeredgewidth=2, zorder=5)
+    ax.text(0.98, 0.30, "● balanced alert threshold (chosen on TUNE)", color=INK_2, fontsize=8,
+            ha="right", transform=ax.transAxes)
     ax.set_xlabel("False positive rate (benign flagged)")
     ax.set_ylabel("True positive rate (attacks caught)")
     ax.set_title(f"ROC curves — final test ({n_b} benign, {n_a} attack)", loc="left")
@@ -480,6 +525,9 @@ def main():
               f"AUC {s['roc_auc']:.3f} (v1 {s['baseline_roc_auc']:.3f})  "
               f"caught {s['attacks_caught_p99']}/{s['attacks_total']} (v1 {s['baseline_attacks_caught_p99']})  "
               f"false alarms {s['false_alarms_p99']}/{s['benign_total']}  F1 {s['f1_p99']:.3f}")
+        print(f"        balanced (z>{s['balanced_z_cutoff']:.3f}): attacks {s['attacks_caught_balanced']}/{s['attacks_total']}  "
+              f"normal passed {s['normal_passed_balanced']}/{s['benign_total']}  precision {s['precision_balanced']:.3f}  "
+              f"F1 {s['f1_balanced']:.3f}  balanced acc {s['balanced_accuracy']:.3f}")
 
 
 if __name__ == "__main__":

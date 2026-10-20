@@ -30,6 +30,12 @@ python codes/evaluation/evaluate_models.py   # seconds
 4. The selected configurations are evaluated **once** on FINAL, next to the
    v1 models re-scored on the same FINAL records
    (`baseline_original_models.json`).
+5. **Two operating points** per model:
+   - **kill** (strict) — p99 of benign val, ~1% false alarms; for the Layer 5
+     kill switch, where a false alarm kills a legitimate process;
+   - **balanced alert** — the cutoff on `z` that maximises Youden's J
+     (% attacks caught + % normal passed − 1) **on TUNE**, then applied once
+     to FINAL. Catches most attacks while passing most normal recordings.
 
 ## Results on FINAL (583 benign, 716 attack)
 
@@ -47,6 +53,25 @@ At the looser p95 threshold (≈5% false alarms) the LSTM catches **232 / 716
 (32%)** with 28 false alarms (89% precision); GRU 234 / 716.
 From the ROC curve, the LSTM catches 37% of attacks at 5% false alarms, 48%
 at 10% and 74% at 20%.
+
+### Balanced alert threshold (chosen on TUNE, applied to FINAL)
+
+| Model | z cutoff | Attacks detected | Normal passed | False alarms | Precision | F1 | Balanced acc. |
+|---|---|---|---|---|---|---|---|
+| HMM  | 0.326 | 299 / 716 (41.8%) | 483 / 583 (82.8%) | 100 | 74.9% | 0.536 | 0.623 |
+| GRU  | 0.114 | 624 / 716 (87.2%) | 381 / 583 (65.4%) | 202 | 75.5% | 0.809 | 0.763 |
+| **LSTM** | **0.108** | **638 / 716 (89.1%)** | **381 / 583 (65.4%)** | 202 | 76.0% | **0.820** | **0.772** |
+
+LSTM per dataset at the balanced threshold: ADFA-LD 464/518 attacks,
+192/328 normal; LID-DS 60/81 attacks, 89/127 normal (Heartbleed 56/77);
+PLAID 114/117 attacks, 100/128 normal. Every attack type is caught ≥ 72%
+(Adduser 78%, Heartbleed 72%, all PLAID types ≥ 90%).
+
+The balanced point catches ~6× more attacks than the strict one (638 vs
+107) at the cost of ~1 in 3 normal recordings being flagged — suitable for
+**alerting / logging / review**, not for killing processes. Layer 5 uses
+both: the alert threshold to raise suspicion, the strict threshold (with
+hysteresis over time) to kill.
 
 ### Per dataset — ROC-AUC, v1 → v2 (LSTM)
 
@@ -90,9 +115,9 @@ at 10% and 74% at 20%.
 | File | Contents |
 |---|---|
 | `tuning_results.csv` | all 60 candidates (3 models × 20) scored on TUNE |
-| `thresholds.json` | selected score column, scheme and per-dataset median/p95/p99/p99.5 per model |
+| `thresholds.json` | selected score column, scheme, per-dataset median/p95/p99/p99.5, and the balanced alert cutoff (z and per-dataset score) per model |
 | `model_summary.csv` | FINAL metrics per model + v1 baseline + cost |
-| `threshold_metrics.csv` | TP/FP/TN/FN, precision, recall, F1, FPR at p95 / p99 / p99.5 |
+| `threshold_metrics.csv` | TP/FP/TN/FN, precision, recall, F1, FPR at p95 / p99 / p99.5 and the balanced alert threshold |
 | `per_dataset_metrics.csv` | per dataset and per LID-DS CVE, with v1 AUC |
 | `per_attack_type_metrics.csv` | detection rate per attack type at each threshold |
 | `unk_analysis.csv` | detection with vs without unseen syscalls |

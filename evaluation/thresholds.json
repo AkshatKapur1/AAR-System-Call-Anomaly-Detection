@@ -1,6 +1,10 @@
 {
   "source": "benign val record scores; flag when score > threshold",
   "primary": "p99",
+  "operating_points": {
+    "kill": "p99 of benign val (~1% false alarms)",
+    "balanced_alert": "max Youden's J on TUNE"
+  },
   "models": {
     "hmm": {
       "column": "window7_mean",
@@ -23,6 +27,15 @@
           "p95": 30.567368317736197,
           "p99": 34.49294267792586,
           "p99_5": 35.953919200853946
+        }
+      },
+      "balanced_alert": {
+        "z_cutoff": 0.3256367065553172,
+        "chosen_on": "TUNE, max Youden's J",
+        "score_cutoff_per_group": {
+          "ADFA-LD": 23.729625618137046,
+          "LID-DS": 23.707320451355248,
+          "PLAID": 26.23483258075037
         }
       }
     },
@@ -48,6 +61,15 @@
           "p99": 3.4819449768867363,
           "p99_5": 3.836379344544584
         }
+      },
+      "balanced_alert": {
+        "z_cutoff": 0.11358064057593442,
+        "chosen_on": "TUNE, max Youden's J",
+        "score_cutoff_per_group": {
+          "ADFA-LD": 0.7474924979096857,
+          "LID-DS": 0.22664006776126933,
+          "PLAID": 0.5059344307048027
+        }
       }
     },
     "lstm": {
@@ -71,6 +93,15 @@
           "p95": 1.6692872178701632,
           "p99": 3.0880835314538277,
           "p99_5": 4.0815476190457165
+        }
+      },
+      "balanced_alert": {
+        "z_cutoff": 0.10808252508774877,
+        "chosen_on": "TUNE, max Youden's J",
+        "score_cutoff_per_group": {
+          "ADFA-LD": 0.7467308740199619,
+          "LID-DS": 0.22414334750252138,
+          "PLAID": 0.46457578027614044
         }
       }
     }
