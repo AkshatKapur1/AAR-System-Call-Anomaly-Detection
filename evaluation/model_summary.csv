@@ -1,4 +1,4 @@
-model,roc_auc,roc_auc_ci95_low,roc_auc_ci95_high,pr_auc,fpr_at_tpr_1,fpr_at_tpr_0_95,threshold_p99,precision_p99,recall_p99,f1_p99,fpr_p99,oracle_best_f1_on_test,oracle_threshold_on_test,train_time_seconds,inference_ms_per_1000_windows,n_parameters,model_file_kb
-hmm,0.527195,0.500387,0.554268,0.628581,0.998801,0.980815,48.195065,0.923077,0.07045,0.130909,0.007194,0.71274,17.75966,430.7,7.596,1848,20.6
-gru,0.67173,0.647735,0.696524,0.736367,0.997602,0.841727,6.526681,0.900763,0.11546,0.204683,0.015588,0.725091,1.862256,84.0,3.308,40350,160.9
-lstm,0.664723,0.637045,0.687936,0.73337,0.996403,0.857314,6.350922,0.911392,0.1409,0.244068,0.016787,0.718978,1.860765,47.2,2.713,46622,185.4
+model,mode,aggregation,threshold_scheme,roc_auc,roc_auc_ci95_low,roc_auc_ci95_high,pr_auc,fpr_at_tpr_1,fpr_at_tpr_0_95,attacks_caught_p99,attacks_total,false_alarms_p99,benign_total,precision_p99,recall_p99,f1_p99,fpr_p99,oracle_best_f1_on_final,baseline_roc_auc,baseline_recall_p99,baseline_attacks_caught_p99,train_time_seconds,inference_ms_per_1000_windows,n_parameters,model_file_kb
+hmm,window7,mean,per_dataset,0.683027,0.65424,0.7089,0.728262,0.895369,0.723842,88,716,9,583,0.907216,0.122905,0.216482,0.015437,0.751387,0.539362,0.071229,51,1722.3,67.96,8160,70.0
+gru,stream,mean,per_dataset,0.820983,0.798368,0.843007,0.848477,0.963979,0.809605,110,716,4,583,0.964912,0.153631,0.26506,0.006861,0.812417,0.68236,0.115922,83,2284.7,19.395,216414,849.8
+lstm,stream,mean,per_dataset,0.835379,0.812738,0.857511,0.855514,0.97084,0.785592,107,716,6,583,0.946903,0.149441,0.258142,0.010292,0.822917,0.675974,0.149441,107,1605.1,8.334,274270,1075.8

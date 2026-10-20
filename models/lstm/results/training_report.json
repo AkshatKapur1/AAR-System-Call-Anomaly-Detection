@@ -1,35 +1,104 @@
 {
-  "input_file": "C:\\Users\\Akshat Kapur\\Downloads\\train_windows_n7.jsonl\\train_windows_n7.jsonl",
-  "total_lines_in_source": 8771179,
-  "vocab_size": 222,
-  "train_sample_size": 500000,
-  "held_out_sample_size": 47265,
+  "version": "v2",
+  "training_data": "split/train.jsonl.gz \u2014 all records, 128-syscall chunks, weighted by sample_weight",
+  "early_stopping": "benign val loss (split/val.jsonl.gz)",
   "architecture": {
     "type": "LSTM (next-syscall prediction)",
-    "embed_dim": 32,
-    "hidden_dim": 64,
-    "num_layers": 1
+    "embed_dim": 64,
+    "hidden_dim": 128,
+    "num_layers": 2,
+    "dropout": 0.1,
+    "n_params": 274270
   },
-  "epochs": 5,
-  "batch_size": 512,
-  "learning_rate": 0.001,
-  "epoch_train_losses": [
-    1.3711224991443092,
-    0.7518930005075499,
-    0.6981629434603142,
-    0.6757054517432636,
-    0.6626577712862372
+  "config": {
+    "embed_dim": 64,
+    "hidden_dim": 128,
+    "num_layers": 2,
+    "dropout": 0.1,
+    "chunk_len": 128,
+    "batch_size": 128,
+    "learning_rate": 0.002,
+    "max_epochs": 12,
+    "patience": 2,
+    "grad_clip": 1.0,
+    "seed": 42
+  },
+  "epochs_run": 12,
+  "best_val_loss": 0.4238263395485208,
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 1.248152846869122,
+      "val_loss": 0.6883305180362912,
+      "elapsed_s": 140.6
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.5668533069236553,
+      "val_loss": 0.5696445087115315,
+      "elapsed_s": 287.4
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.4851412909388036,
+      "val_loss": 0.5239832706346792,
+      "elapsed_s": 427.4
+    },
+    {
+      "epoch": 4,
+      "train_loss": 0.447519816583779,
+      "val_loss": 0.49509687960750925,
+      "elapsed_s": 571.6
+    },
+    {
+      "epoch": 5,
+      "train_loss": 0.4223140418805085,
+      "val_loss": 0.4793297157558525,
+      "elapsed_s": 708.9
+    },
+    {
+      "epoch": 6,
+      "train_loss": 0.40609709111711295,
+      "val_loss": 0.4637088371871382,
+      "elapsed_s": 843.2
+    },
+    {
+      "epoch": 7,
+      "train_loss": 0.3951719456751169,
+      "val_loss": 0.45355889817742095,
+      "elapsed_s": 973.2
+    },
+    {
+      "epoch": 8,
+      "train_loss": 0.3849602632765459,
+      "val_loss": 0.4452629445201835,
+      "elapsed_s": 1103.3
+    },
+    {
+      "epoch": 9,
+      "train_loss": 0.37879060476634074,
+      "val_loss": 0.4425033183221693,
+      "elapsed_s": 1239.2
+    },
+    {
+      "epoch": 10,
+      "train_loss": 0.3711850406223771,
+      "val_loss": 0.43946758825135607,
+      "elapsed_s": 1362.0
+    },
+    {
+      "epoch": 11,
+      "train_loss": 0.3678988266927384,
+      "val_loss": 0.4427575031716483,
+      "elapsed_s": 1486.5
+    },
+    {
+      "epoch": 12,
+      "train_loss": 0.35589458205642777,
+      "val_loss": 0.4238263395485208,
+      "elapsed_s": 1605.1
+    }
   ],
-  "final_train_loss": 0.6626577712862372,
-  "train_time_seconds": 47.2,
-  "held_out_nll": {
-    "mean": 0.6498487224303807,
-    "std": 0.7643580340737688,
-    "min": 0.0022528606932610273,
-    "max": 9.113822937011719,
-    "p05": 0.0022528606932610273,
-    "p50": 0.3971073627471924,
-    "p95": 2.1995628833770753
-  },
-  "caveat": "No attack-labeled data was available in this handoff (only train_windows_n7.jsonl, benign windows). These are convergence and held-out-loss diagnostics, not detection accuracy. Real precision/recall/F1/AUC requires scoring a labeled benign+attack test set through this same model. Score direction note: unlike the HMM's log-likelihood (higher/less-negative = more normal), this is negative log-likelihood loss \u2014 HIGHER = more surprising = more anomalous. Don't compare the two raw numbers directly."
+  "train_time_seconds": 1605.1,
+  "vocab_size": 222
 }

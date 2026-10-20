@@ -1,177 +1,155 @@
 """
-Track A: HMM training on pre-extracted 7-gram windows.
+Track A: HMM (v2) — training and scoring.
 
-Input : train_windows_n7.jsonl — one JSON array of 7 integer syscall IDs
-        per line (already windowed, already integer-encoded via vocab.json).
-Output: trained CategoricalHMM + evaluation report, written to
-        track_a_hmm_results/.
+Changes vs. v1 (200k sampled 7-gram windows, 8 states, unweighted):
+  - trains on ALL of split/train.jsonl.gz as full recordings, so transitions
+    between consecutive windows are learned too;
+  - honours the capping sample_weight by repeating ADFA-LD records
+    round(3.04) = 3 times (EM on a repeated sequence == weight 3);
+  - number of hidden states chosen from {8, 16, 32} by per-syscall
+    log-likelihood on benign val (no attack data used);
+  - Laplace smoothing kept (no zero probabilities for rare syscalls).
 
-Each 7-gram window is treated as one short independent sequence for
-Baum-Welch training (hmmlearn's X/lengths API). With 8.77M windows in the
-source file, fitting on all of them is not tractable in reasonable time,
-so training uses a fixed-size systematic subsample (every Nth line) drawn
-across the whole file, plus a separate held-out subsample (offset from the
-training one) for a convergence/likelihood sanity check.
+Scoring functions (used by codes/scoring/score_models.py):
+  - window7_scores : -log P(7-syscall window), the window seen in isolation;
+  - token_nll_stream: -log P(syscall t | all earlier syscalls of the record),
+    via the scaled forward algorithm, for the "stream" mode.
+
+Output: models/HMM/hmm_model.pkl and models/HMM/training_report.json.
+Run:    python models/HMM/Codes/train_hmm.py
 """
+import gzip
 import json
 import os
 import time
+import warnings
 
+import joblib
 import numpy as np
 from hmmlearn import hmm
-import joblib
 
-INPUT_PATH = r"C:\Users\Akshat Kapur\Downloads\train_windows_n7.jsonl\train_windows_n7.jsonl"
-VOCAB_PATH = os.path.join(os.path.dirname(__file__), "vocab.json")
-RESULTS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "track_a_hmm_results")
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+SPLIT_DIR = os.path.join(REPO_ROOT, "split")
+RESULTS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
-TOTAL_LINES = 8_771_179
-TRAIN_SAMPLE_SIZE = 200_000
-HELD_OUT_SAMPLE_SIZE = 50_000
-N_STATES = 8
-N_ITER = 20
+STATE_CANDIDATES = [8, 16, 32]
+N_ITER = 25
+TOL = 1e-2
 RANDOM_STATE = 42
-SMOOTHING_EPSILON = 1e-4  # Laplace smoothing: avoids exact-zero probabilities
-                          # for syscalls that are rare/absent in the training
-                          # subsample, which otherwise cause -inf log-likelihood
-                          # on held-out windows that contain them.
+SMOOTHING_EPSILON = 1e-4
+N = 7
 
 
-def load_vocab():
-    with open(VOCAB_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+def load_records(split):
+    with gzip.open(os.path.join(SPLIT_DIR, f"{split}.jsonl.gz"), "rt", encoding="utf-8") as f:
+        return [json.loads(line) for line in f]
 
 
-def systematic_sample(path, total_lines, train_n, held_out_n, seed=RANDOM_STATE):
-    """
-    Single pass over the file. Every `stride`-th line goes to the training
-    sample; a second, offset stride pulls the held-out sample, so the two
-    sets are disjoint and both spread uniformly across the whole file
-    (not just the first N lines).
-    """
-    rng = np.random.default_rng(seed)
-    stride = total_lines // train_n
-    held_out_stride = total_lines // held_out_n
-    train_windows = []
-    held_out_windows = []
-    with open(path, "r", encoding="utf-8") as f:
-        for i, line in enumerate(f):
-            if i % stride == 0 and len(train_windows) < train_n:
-                train_windows.append(json.loads(line))
-            elif i % held_out_stride == 1 and len(held_out_windows) < held_out_n:
-                held_out_windows.append(json.loads(line))
-    return np.array(train_windows, dtype=np.int32), np.array(held_out_windows, dtype=np.int32)
+def to_hmmlearn(seqs):
+    seqs = [s for s in seqs if len(s) > 1]
+    return np.concatenate(seqs).reshape(-1, 1), [len(s) for s in seqs]
 
 
-def windows_to_hmmlearn_input(windows):
-    """windows: (n_windows, 7) -> flattened X: (n_windows*7, 1), lengths: (n_windows,)"""
-    n_windows, window_len = windows.shape
-    X = windows.reshape(-1, 1)
-    lengths = np.full(n_windows, window_len, dtype=np.int32)
-    return X, lengths
+def smooth(model, eps=SMOOTHING_EPSILON):
+    for name in ("emissionprob_", "transmat_", "startprob_"):
+        m = getattr(model, name) + eps
+        setattr(model, name, m / m.sum(axis=-1, keepdims=True))
+    return model
 
+
+# ---------------------------------------------------------------- scoring
+
+def window7_scores(model, windows, batch=200_000):
+    """-log P(window) for each row of windows (n, 7), log-space forward."""
+    log_start, log_trans, log_emit = (np.log(model.startprob_), np.log(model.transmat_),
+                                      np.log(model.emissionprob_))
+    out = np.empty(len(windows))
+    for start in range(0, len(windows), batch):
+        w = windows[start:start + batch]
+        alpha = log_start[None, :] + log_emit[:, w[:, 0]].T
+        for t in range(1, w.shape[1]):
+            m = alpha[:, :, None] + log_trans[None, :, :]
+            mx = m.max(axis=1, keepdims=True)
+            alpha = mx[:, 0, :] + np.log(np.exp(m - mx).sum(axis=1)) + log_emit[:, w[:, t]].T
+        mx = alpha.max(axis=1, keepdims=True)
+        out[start:start + len(w)] = -(mx[:, 0] + np.log(np.exp(alpha - mx).sum(axis=1)))
+    return out
+
+
+def token_nll_stream(model, records, batch_records=256):
+    """-log P(s_t | s_1..s_{t-1}) for t = 2..L of every record (scaled
+    forward algorithm, records batched by length). One array per record."""
+    pi, A, B = model.startprob_, model.transmat_, model.emissionprob_
+    out = [None] * len(records)
+    order = sorted(range(len(records)), key=lambda i: len(records[i]))
+    for b in range(0, len(order), batch_records):
+        idx = order[b:b + batch_records]
+        lens = np.array([len(records[i]) for i in idx])
+        mat = np.zeros((len(idx), lens.max()), dtype=np.int64)
+        for j, i in enumerate(idx):
+            mat[j, :lens[j]] = records[i]
+        nll = np.zeros((len(idx), max(lens.max() - 1, 0)))
+        alpha = pi[None, :] * B[:, mat[:, 0]].T
+        alpha /= alpha.sum(axis=1, keepdims=True)
+        for t in range(1, lens.max()):
+            pred = alpha @ A
+            joint = pred * B[:, mat[:, t]].T
+            c = joint.sum(axis=1, keepdims=True)
+            nll[:, t - 1] = -np.log(c[:, 0])
+            alpha = joint / c
+        for j, i in enumerate(idx):
+            out[i] = nll[j, :lens[j] - 1]
+    return out
+
+
+# ---------------------------------------------------------------- training
 
 def main():
-    os.makedirs(RESULTS_DIR, exist_ok=True)
-    vocab = load_vocab()
-    n_features = len(vocab)  # 222
+    warnings.filterwarnings("ignore")
+    with open(os.path.join(SPLIT_DIR, "vocab.json"), encoding="utf-8") as f:
+        n_features = len(json.load(f))
+    train_records, val_records = load_records("train"), load_records("val")
+    train_seqs = []
+    for r in train_records:
+        train_seqs.extend([r["token_ids"]] * max(1, round(r.get("sample_weight", 1.0))))
+    X, lengths = to_hmmlearn(train_seqs)
+    Xv, lengths_v = to_hmmlearn([r["token_ids"] for r in val_records])
+    print(f"train: {len(lengths)} sequences / {len(X)} syscalls (ADFA-LD repeated x3); "
+          f"val: {len(lengths_v)} sequences / {len(Xv)} syscalls")
 
-    print(f"Sampling {TRAIN_SAMPLE_SIZE} training windows and "
-          f"{HELD_OUT_SAMPLE_SIZE} held-out windows from {TOTAL_LINES} total...")
-    t0 = time.time()
-    train_windows, held_out_windows = systematic_sample(
-        INPUT_PATH, TOTAL_LINES, TRAIN_SAMPLE_SIZE, HELD_OUT_SAMPLE_SIZE
-    )
-    print(f"  sampled in {time.time() - t0:.1f}s "
-          f"(train={train_windows.shape}, held_out={held_out_windows.shape})")
+    candidates, best = [], None
+    t_all = time.time()
+    for k in STATE_CANDIDATES:
+        t0 = time.time()
+        model = hmm.CategoricalHMM(n_components=k, n_features=n_features, n_iter=N_ITER, tol=TOL,
+                                   random_state=RANDOM_STATE, implementation="scaling", init_params="ste")
+        model.fit(X, lengths)
+        smooth(model)
+        val_ll = model.score(Xv, lengths_v) / len(Xv)
+        info = {"n_states": k, "converged": bool(model.monitor_.converged),
+                "iterations": len(model.monitor_.history), "val_loglik_per_syscall": val_ll,
+                "train_time_seconds": round(time.time() - t0, 1)}
+        candidates.append(info)
+        print(f"  {k} states: val log-lik/syscall={val_ll:.4f} ({info['train_time_seconds']}s)")
+        if best is None or val_ll > best[1]["val_loglik_per_syscall"]:
+            best = (model, info)
 
-    X_train, lengths_train = windows_to_hmmlearn_input(train_windows)
-    X_held_out, lengths_held_out = windows_to_hmmlearn_input(held_out_windows)
-
-    print(f"Fitting CategoricalHMM: n_states={N_STATES}, n_features={n_features}, "
-          f"n_iter={N_ITER}, on {len(lengths_train)} sequences ({len(X_train)} observations)...")
-    t0 = time.time()
-    model = hmm.CategoricalHMM(
-        n_components=N_STATES,
-        n_features=n_features,
-        n_iter=N_ITER,
-        random_state=RANDOM_STATE,
-        verbose=True,
-    )
-    model.fit(X_train, lengths_train)
-    train_time = time.time() - t0
-    print(f"  fit finished in {train_time:.1f}s, converged={model.monitor_.converged}, "
-          f"final train log-likelihood={model.monitor_.history[-1]:.2f}")
-
-    # Laplace smoothing: floor every probability at SMOOTHING_EPSILON and
-    # renormalize, so no syscall/transition/start-state has exactly zero
-    # probability. Without this, a held-out window containing any syscall
-    # the model never assigned probability to scores -inf.
-    def smooth(matrix, eps=SMOOTHING_EPSILON):
-        matrix = matrix + eps
-        return matrix / matrix.sum(axis=-1, keepdims=True)
-
-    model.emissionprob_ = smooth(model.emissionprob_)
-    model.transmat_ = smooth(model.transmat_)
-    model.startprob_ = smooth(model.startprob_)
-
-    # Per-window log-likelihood on held-out data (not used in training) —
-    # a convergence/sanity check, NOT a detection-accuracy metric: this
-    # file has no attack-labeled windows, so precision/recall/F1/AUC can't
-    # be computed yet. That needs a labeled test set (benign + attack)
-    # built the same way, which doesn't exist yet in this handoff.
-    per_window_scores = []
-    for w in held_out_windows:
-        score = model.score(w.reshape(-1, 1))
-        per_window_scores.append(score)
-    per_window_scores = np.array(per_window_scores)
-
+    model, info = best
+    joblib.dump(model, os.path.join(RESULTS_DIR, "hmm_model.pkl"))
     report = {
-        "input_file": INPUT_PATH,
-        "total_lines_in_source": TOTAL_LINES,
+        "version": "v2",
+        "training_data": "split/train.jsonl.gz — all records as full sequences, ADFA-LD repeated x3 (sample_weight)",
+        "model_selection": "n_states with the best per-syscall log-likelihood on benign val",
+        "candidates": candidates,
+        "selected_n_states": info["n_states"],
+        "n_iter_max": N_ITER, "tol": TOL, "smoothing_epsilon": SMOOTHING_EPSILON,
         "vocab_size": n_features,
-        "train_sample_size": int(TRAIN_SAMPLE_SIZE),
-        "held_out_sample_size": int(HELD_OUT_SAMPLE_SIZE),
-        "n_hidden_states": N_STATES,
-        "n_iter_requested": N_ITER,
-        "converged": bool(model.monitor_.converged),
-        "n_iter_actual": len(model.monitor_.history),
-        "final_train_log_likelihood": float(model.monitor_.history[-1]),
-        "train_time_seconds": round(train_time, 1),
-        "held_out_log_likelihood": {
-            "mean": float(per_window_scores.mean()),
-            "std": float(per_window_scores.std()),
-            "min": float(per_window_scores.min()),
-            "max": float(per_window_scores.max()),
-            "p05": float(np.percentile(per_window_scores, 5)),
-            "p50": float(np.percentile(per_window_scores, 50)),
-            "p95": float(np.percentile(per_window_scores, 95)),
-        },
-        "caveat": (
-            "No attack-labeled data was available in this handoff (only "
-            "train_windows_n7.jsonl, benign windows). These are convergence "
-            "and held-out-likelihood diagnostics, not detection accuracy. "
-            "Real precision/recall/F1/AUC requires scoring a labeled "
-            "benign+attack test set through this same model."
-        ),
+        "train_time_seconds": info["train_time_seconds"],
+        "total_time_all_candidates_seconds": round(time.time() - t_all, 1),
     }
-
-    model_path = os.path.join(RESULTS_DIR, "hmm_model.pkl")
-    joblib.dump(model, model_path)
-
-    report_path = os.path.join(RESULTS_DIR, "training_report.json")
-    with open(report_path, "w", encoding="utf-8") as f:
+    with open(os.path.join(RESULTS_DIR, "training_report.json"), "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
-
-    scores_path = os.path.join(RESULTS_DIR, "held_out_window_scores.csv")
-    with open(scores_path, "w", encoding="utf-8") as f:
-        f.write("window_index,log_likelihood\n")
-        for i, s in enumerate(per_window_scores):
-            f.write(f"{i},{s}\n")
-
-    print(f"\nSaved model -> {model_path}")
-    print(f"Saved report -> {report_path}")
-    print(f"Saved held-out scores -> {scores_path}")
+    print(f"selected {info['n_states']} states -> models/HMM/hmm_model.pkl")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,96 @@
+{
+  "description": "Original models (commit 5c1f5ea/a1f3789): 7-gram windows, score_top5, one global threshold = p99 of benign val. Recomputed on the FINAL 70% of test so it is directly comparable with the improved pipeline.",
+  "partition": "split/test_partition.json -> final",
+  "models": {
+    "hmm": {
+      "roc_auc": 0.5393624768822408,
+      "pr_auc": 0.6358414139913786,
+      "threshold": 48.195064943610866,
+      "tp": 51,
+      "fp": 5,
+      "tn": 578,
+      "fn": 665,
+      "precision": 0.9107142857142857,
+      "recall": 0.0712290502793296,
+      "f1": 0.13212435233160622,
+      "fpr": 0.008576329331046312,
+      "per_dataset": {
+        "ADFA-LD": {
+          "roc_auc": 0.4436093323288445,
+          "attacks_caught": 21,
+          "attacks": 518
+        },
+        "LID-DS": {
+          "roc_auc": 0.6182560513269175,
+          "attacks_caught": 0,
+          "attacks": 81
+        },
+        "PLAID": {
+          "roc_auc": 0.819377670940171,
+          "attacks_caught": 30,
+          "attacks": 117
+        }
+      }
+    },
+    "gru": {
+      "roc_auc": 0.6823595925524881,
+      "pr_auc": 0.7471586526230013,
+      "threshold": 6.526681333303439,
+      "tp": 83,
+      "fp": 8,
+      "tn": 575,
+      "fn": 633,
+      "precision": 0.9120879120879121,
+      "recall": 0.11592178770949721,
+      "f1": 0.20570012391573728,
+      "fpr": 0.0137221269296741,
+      "per_dataset": {
+        "ADFA-LD": {
+          "roc_auc": 0.6058892080233543,
+          "attacks_caught": 25,
+          "attacks": 518
+        },
+        "LID-DS": {
+          "roc_auc": 0.5989112472052105,
+          "attacks_caught": 3,
+          "attacks": 81
+        },
+        "PLAID": {
+          "roc_auc": 0.906917735042735,
+          "attacks_caught": 55,
+          "attacks": 117
+        }
+      }
+    },
+    "lstm": {
+      "roc_auc": 0.6759740601972077,
+      "pr_auc": 0.7469792530787789,
+      "threshold": 6.3509221875229365,
+      "tp": 107,
+      "fp": 8,
+      "tn": 575,
+      "fn": 609,
+      "precision": 0.9304347826086956,
+      "recall": 0.1494413407821229,
+      "f1": 0.25752105896510225,
+      "fpr": 0.0137221269296741,
+      "per_dataset": {
+        "ADFA-LD": {
+          "roc_auc": 0.5990794801770412,
+          "attacks_caught": 41,
+          "attacks": 518
+        },
+        "LID-DS": {
+          "roc_auc": 0.5304753572470109,
+          "attacks_caught": 4,
+          "attacks": 81
+        },
+        "PLAID": {
+          "roc_auc": 0.9112246260683761,
+          "attacks_caught": 62,
+          "attacks": 117
+        }
+      }
+    }
+  }
+}

@@ -1,23 +1,60 @@
 {
   "best_model": "lstm",
-  "reason": "ROC-AUC within 0.01 of gru; won on recall at the p99 threshold, then inference speed",
-  "selection_rule": "highest test ROC-AUC; if within 0.01, higher recall at p99, then faster inference",
-  "roc_auc": 0.6647232116459474,
-  "pr_auc": 0.7333702933165225,
-  "threshold_p99": 6.3509221875229365,
-  "precision_p99": 0.9113924050632911,
-  "recall_p99": 0.14090019569471623,
-  "f1_p99": 0.24406779661016945,
-  "fpr_p99": 0.016786570743405275,
-  "for_layer5": {
-    "val_scores": "scoring/lstm_val_record_scores.csv",
-    "test_scores": "scoring/lstm_test_record_scores.csv",
-    "model_file": "models/lstm/results/lstm_model.pt",
-    "starting_threshold": 6.3509221875229365
+  "chosen_on": "TUNE part of test (split/test_partition.json) \u2014 FINAL not used for any choice",
+  "selection_rule": "highest TUNE ROC-AUC; within 0.01, higher TUNE recall at p99",
+  "tune_roc_auc_per_model": {
+    "hmm": 0.6446892169882562,
+    "gru": 0.8349998698018384,
+    "lstm": 0.8470822591985001
   },
-  "ranking_by_roc_auc": [
-    "gru",
-    "lstm",
-    "hmm"
-  ]
+  "configuration": {
+    "mode": "stream",
+    "aggregation": "mean",
+    "threshold_scheme": "per_dataset",
+    "score_column": "stream_mean"
+  },
+  "final_results": {
+    "roc_auc": 0.8353787958641969,
+    "pr_auc": 0.8555143151126776,
+    "attacks_caught_p99": 107,
+    "attacks_total": 716,
+    "false_alarms_p99": 6,
+    "benign_total": 583,
+    "precision_p99": 0.9469026548672567,
+    "recall_p99": 0.1494413407821229,
+    "f1_p99": 0.25814234016887816,
+    "fpr_p99": 0.010291595197255575
+  },
+  "for_layer5": {
+    "model_file": "models/lstm/results/lstm_model.pt",
+    "score_files": {
+      "val": "scoring/lstm_val_record_scores.csv",
+      "test": "scoring/lstm_test_record_scores.csv"
+    },
+    "thresholds": {
+      "column": "stream_mean",
+      "scheme": "per_dataset",
+      "groups": {
+        "ADFA-LD": {
+          "median": 0.5380034575399484,
+          "p95": 1.9402060085667105,
+          "p99": 2.4691890614158227,
+          "p99_5": 2.7679616497416126
+        },
+        "LID-DS": {
+          "median": 0.19937794529490843,
+          "p95": 0.2867279955750878,
+          "p99": 0.42851213870412697,
+          "p99_5": 0.5842185632607919
+        },
+        "PLAID": {
+          "median": 0.14665921253262523,
+          "p95": 1.6692872178701632,
+          "p99": 3.0880835314538277,
+          "p99_5": 4.0815476190457165
+        }
+      }
+    },
+    "note": "threshold per dataset = benign val percentile of the score column; z = (score - median) / (p99 - median), z > 1 == above p99"
+  }
 }

@@ -1,26 +1,35 @@
 {
-  "test_records": {
-    "hmm": 1860,
-    "gru": 1860,
-    "lstm": 1860
+  "partition": {
+    "tune_records": 559,
+    "final_records": 1301
   },
-  "excluded_nan_scores": {
+  "final_composition": {
+    "benign": 583,
+    "attack": 716
+  },
+  "candidates_per_model": 20,
+  "selected": {
     "hmm": {
-      "val": 1,
-      "test": 4
+      "mode": "window7",
+      "aggregation": "mean",
+      "threshold_scheme": "per_dataset",
+      "tune_roc_auc": 0.6446892169882562,
+      "tune_recall_p99": 0.12418300653594772
     },
     "gru": {
-      "val": 1,
-      "test": 4
+      "mode": "stream",
+      "aggregation": "mean",
+      "threshold_scheme": "per_dataset",
+      "tune_roc_auc": 0.8349998698018384,
+      "tune_recall_p99": 0.18627450980392157
     },
     "lstm": {
-      "val": 1,
-      "test": 4
+      "mode": "stream",
+      "aggregation": "mean",
+      "threshold_scheme": "per_dataset",
+      "tune_roc_auc": 0.8470822591985001,
+      "tune_recall_p99": 0.14705882352941177
     }
-  },
-  "test_composition": {
-    "benign": 834,
-    "attack": 1022
   },
   "percentiles": {
     "p95": 95.0,
@@ -30,6 +39,6 @@
   "primary_threshold": "p99",
   "bootstrap_resamples_for_auc_ci": 1000,
   "seed": 42,
-  "peak_memory_mb_during_scoring": 1470.0,
+  "peak_memory_mb_during_scoring": 6008.6,
   "best_model": "lstm"
 }

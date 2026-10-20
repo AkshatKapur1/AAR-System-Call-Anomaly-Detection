@@ -1,32 +1,16 @@
 {
+  "version": "v2",
   "n": 7,
   "vocab_size": 222,
-  "score_direction": "higher = more anomalous (all models)",
-  "window_score": {
-    "hmm": "-log P(7-syscall window) via forward algorithm",
-    "gru": "mean NLL of predicting syscalls 2..7 within the window",
-    "lstm": "mean NLL of predicting syscalls 2..7 within the window"
+  "score_direction": "higher = more anomalous (all models, all columns)",
+  "modes": {
+    "window7": "window scored in isolation",
+    "stream": "window scored with the whole preceding recording as context"
   },
-  "record_score": "score = score_top5 = mean of the top 5% most anomalous windows in the record (fixed in advance, not tuned)",
-  "verification_against_training_held_out": {
-    "hmm": {
-      "held_out_windows_rebuilt": 48979,
-      "stored_scores": 48979,
-      "max_abs_diff": 7.105427357601002e-15,
-      "passed": true
-    },
-    "gru": {
-      "held_out_windows_rebuilt": 47265,
-      "stored_scores": 47265,
-      "max_abs_diff": 4.76837158203125e-07,
-      "passed": true
-    },
-    "lstm": {
-      "held_out_windows_rebuilt": 47265,
-      "stored_scores": 47265,
-      "max_abs_diff": 0.0,
-      "passed": true
-    }
+  "aggregations": {
+    "mean": "mean window score",
+    "max": "most anomalous window",
+    "top1/top5/top10": "mean of the 1% / 5% / 10% most anomalous windows"
   },
   "splits": {
     "train": {
@@ -36,7 +20,7 @@
         "attack": 0
       },
       "windows": 8771179,
-      "records_with_no_windows (<7 syscalls, score=NaN)": [
+      "records_with_no_windows (<7 syscalls, scores=NaN)": [
         3598,
         3699,
         3813
@@ -53,7 +37,7 @@
         "attack": 0
       },
       "windows": 1719403,
-      "records_with_no_windows (<7 syscalls, score=NaN)": [
+      "records_with_no_windows (<7 syscalls, scores=NaN)": [
         681
       ],
       "unk_rate": {
@@ -68,7 +52,7 @@
         "attack": 1026
       },
       "windows": 3370804,
-      "records_with_no_windows (<7 syscalls, score=NaN)": [
+      "records_with_no_windows (<7 syscalls, scores=NaN)": [
         1718,
         1752,
         1753,
@@ -83,72 +67,92 @@
   "models": {
     "hmm": {
       "model_file": "models/HMM/hmm_model.pkl",
-      "model_file_kb": 20.6,
-      "n_parameters": 1848,
+      "model_file_kb": 70.0,
+      "n_parameters": 8160,
       "inference": {
         "train": {
           "windows": 8771179,
-          "seconds": 70.76,
-          "ms_per_1000_windows": 8.067
+          "window7_seconds": 686.25,
+          "stream_seconds": 6.42,
+          "window7_ms_per_1000_windows": 78.239,
+          "stream_ms_per_1000_windows": 0.731
         },
         "val": {
           "windows": 1719403,
-          "seconds": 11.76,
-          "ms_per_1000_windows": 6.839
+          "window7_seconds": 116.42,
+          "stream_seconds": 4.27,
+          "window7_ms_per_1000_windows": 67.712,
+          "stream_ms_per_1000_windows": 2.486
         },
         "test": {
           "windows": 3370804,
-          "seconds": 25.6,
-          "ms_per_1000_windows": 7.596
+          "window7_seconds": 229.08,
+          "stream_seconds": 4.11,
+          "window7_ms_per_1000_windows": 67.96,
+          "stream_ms_per_1000_windows": 1.219
         }
-      }
+      },
+      "consistency_check_max_abs_diff": 1.4210854715202004e-14
     },
     "gru": {
       "model_file": "models/gru/results/gru_model.pt",
-      "model_file_kb": 160.9,
-      "n_parameters": 40350,
+      "model_file_kb": 849.8,
+      "n_parameters": 216414,
       "inference": {
         "train": {
           "windows": 8771179,
-          "seconds": 23.62,
-          "ms_per_1000_windows": 2.693
+          "window7_seconds": 83.52,
+          "stream_seconds": 97.11,
+          "window7_ms_per_1000_windows": 9.523,
+          "stream_ms_per_1000_windows": 11.071
         },
         "val": {
           "windows": 1719403,
-          "seconds": 4.76,
-          "ms_per_1000_windows": 2.768
+          "window7_seconds": 16.64,
+          "stream_seconds": 59.41,
+          "window7_ms_per_1000_windows": 9.679,
+          "stream_ms_per_1000_windows": 34.555
         },
         "test": {
           "windows": 3370804,
-          "seconds": 11.15,
-          "ms_per_1000_windows": 3.308
+          "window7_seconds": 32.33,
+          "stream_seconds": 65.38,
+          "window7_ms_per_1000_windows": 9.591,
+          "stream_ms_per_1000_windows": 19.395
         }
-      }
+      },
+      "consistency_check_max_abs_diff": 6.15914662382977e-07
     },
     "lstm": {
       "model_file": "models/lstm/results/lstm_model.pt",
-      "model_file_kb": 185.4,
-      "n_parameters": 46622,
+      "model_file_kb": 1075.8,
+      "n_parameters": 274270,
       "inference": {
         "train": {
           "windows": 8771179,
-          "seconds": 23.65,
-          "ms_per_1000_windows": 2.696
+          "window7_seconds": 94.56,
+          "stream_seconds": 43.7,
+          "window7_ms_per_1000_windows": 10.781,
+          "stream_ms_per_1000_windows": 4.982
         },
         "val": {
           "windows": 1719403,
-          "seconds": 4.56,
-          "ms_per_1000_windows": 2.651
+          "window7_seconds": 18.71,
+          "stream_seconds": 22.21,
+          "window7_ms_per_1000_windows": 10.883,
+          "stream_ms_per_1000_windows": 12.917
         },
         "test": {
           "windows": 3370804,
-          "seconds": 9.14,
-          "ms_per_1000_windows": 2.713
+          "window7_seconds": 35.56,
+          "stream_seconds": 28.09,
+          "window7_ms_per_1000_windows": 10.55,
+          "stream_ms_per_1000_windows": 8.334
         }
-      }
+      },
+      "consistency_check_max_abs_diff": 5.563100176075864e-07
     }
   },
-  "peak_memory_mb": 1470.0,
-  "device": "cpu",
+  "peak_memory_mb": 6008.6,
   "torch_threads": 16
 }
