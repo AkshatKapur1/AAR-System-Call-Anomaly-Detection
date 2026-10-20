@@ -1,0 +1,34 @@
+{
+  "model": "lstm",
+  "mode": "stream",
+  "window_normalisation_from_benign_val": {
+    "ADFA-LD": {
+      "median": 0.3899958967582885,
+      "p99": 3.5752130348483817,
+      "windows": 236178
+    },
+    "LID-DS": {
+      "median": 0.07783964429593955,
+      "p99": 1.6644014018525672,
+      "windows": 728503
+    },
+    "PLAID": {
+      "median": 1.9192511899746023e-05,
+      "p99": 3.1300770913561187,
+      "windows": 754722
+    }
+  },
+  "alpha": 0,
+  "sustain_windows": 10,
+  "kill_threshold_z_per_dataset": {
+    "ADFA-LD": 1.161272147067617,
+    "LID-DS": 0.951452463958278,
+    "PLAID": 1.121407901087006
+  },
+  "kill_calibration": "99.0th percentile of benign val sustained peak confidence",
+  "alert_high_z": 0.33844339233973475,
+  "alert_low_z": 0.08844339233973475,
+  "hysteresis_gap": 0.25,
+  "alert_calibration": "max Youden's J on TUNE (peak confidence)",
+  "selection_rule": "most TUNE attacks killed with TUNE benign false-kill rate <= 0.02; ties -> fewer syscalls before kill"
+}
