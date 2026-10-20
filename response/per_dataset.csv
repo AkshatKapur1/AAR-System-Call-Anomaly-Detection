@@ -1,6 +1,6 @@
-dataset,attacks,benign,attacks_killed,benign_killed,attacks_killed_by_escalation,benign_killed_by_escalation,attacks_killed_without_escalation,benign_killed_without_escalation,attack_kill_rate,benign_false_kill_rate,attacks_alerted,benign_alerted,attack_alert_rate,benign_alert_rate,median_syscalls_before_kill,median_share_of_recording_before_kill
-ADFA-LD,518,328,32,4,0,0,32,4,0.061776,0.012195,409,176,0.789575,0.536585,16.0,0.102602
-LID-DS,81,127,61,3,0,0,61,3,0.753086,0.023622,81,49,1.0,0.385827,29.0,0.058212
-PLAID,117,128,30,1,0,0,30,1,0.25641,0.007812,114,19,0.974359,0.148438,206.0,0.186961
-LID-DS/CVE-2012-2122,4,62,3,3,0,0,3,3,0.75,0.048387,4,35,1.0,0.564516,118.0,0.003395
-LID-DS/CVE-2014-0160,77,65,58,0,0,0,58,0,0.753247,0.0,77,14,1.0,0.215385,28.0,0.065118
+group,attacks,normal,attacks_alerted,attacks_contained,attacks_isolated,attacks_killed,attacks_contained_at_end,normal_contained_at_end,normal_alerted,normal_isolated,normal_killed,normal_disrupted,attack_alert_rate,attack_containment_rate,attack_kill_rate,normal_alert_rate,normal_disruption_rate,normal_kill_rate,median_syscalls_before_containment,median_syscalls_before_kill,isolated_normal_mean_share_of_life_isolated
+ADFA-LD,518,328,409,53,30,32,33,4,176,7,4,9,0.789575,0.102317,0.061776,0.536585,0.027439,0.012195,16.0,16.0,0.131668
+LID-DS,81,127,81,61,32,61,61,3,49,4,3,5,1.0,0.753086,0.753086,0.385827,0.03937,0.023622,28.0,29.0,0.045428
+PLAID,117,128,114,50,40,30,48,2,19,2,1,2,0.974359,0.42735,0.25641,0.148438,0.015625,0.007812,16.0,206.0,0.614334
+LID-DS/CVE-2012-2122,4,62,4,3,3,3,3,3,35,4,3,5,1.0,0.75,0.75,0.564516,0.080645,0.048387,116.0,118.0,0.045428
+LID-DS/CVE-2014-0160,77,65,77,58,29,58,58,0,14,0,0,0,1.0,0.753247,0.753247,0.215385,0.0,0.0,28.0,28.0,nan

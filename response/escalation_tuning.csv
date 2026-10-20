@@ -1,8 +1,0 @@
-escalate_percentile,escalate_after_windows,val_benign_kill_rate,tune_attacks_killed,tune_attacks,tune_benign_killed,tune_benign,tune_median_syscalls_before_kill,selected,tune_benign_kill_rate
-off,,0.010817,46,306,5,251,29.0,True,0.01992
-99.5,ADFA-LD 1969; LID-DS 12276; PLAID 3320,0.015625,48,306,7,251,29.0,False,0.027888
-99,ADFA-LD 1699; LID-DS 11220; PLAID 815,0.020433,54,306,7,251,29.0,False,0.027888
-98,ADFA-LD 1466; LID-DS 9568; PLAID 392,0.030048,64,306,11,251,29.0,False,0.043825
-97,ADFA-LD 1159; LID-DS 8285; PLAID 219,0.040865,72,306,12,251,29.0,False,0.047809
-95,ADFA-LD 950; LID-DS 5256; PLAID 59,0.060096,90,306,16,251,66.0,False,0.063745
-90,ADFA-LD 468; LID-DS 2396; PLAID 32,0.104567,135,306,29,251,39.0,False,0.115538

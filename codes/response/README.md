@@ -1,14 +1,13 @@
-# Layer 5 — confidence-gated, hysteresis-based kill switch
+# Layer 5 — confidence-gated, hysteresis-based graduated response
 
 Turns the best model's anomaly scores into **actions on a running process**:
-raise / clear an alert, and kill the process when the evidence is strong and
-sustained. Each val/test recording is replayed window by window, in order, as
-if it were a live process.
+**alert → isolate → kill**. Each val/test recording is replayed window by
+window, in order, as if it were a live process.
 
 ## Run
 
 ```
-python codes/response/simulate_response.py   # ~2 min on CPU
+python codes/response/simulate_response.py   # ~3 min on CPU
 ```
 
 Needs `numpy`, `scipy`, `torch`, `matplotlib`. Uses Layer 4's choice from
@@ -23,105 +22,97 @@ For every new 7-syscall window of a process:
 2. **Normalise** per environment (dataset) with benign val windows:
    `z = (score − median) / (p99 − median)` → 0 = typical normal window,
    1 = 99th percentile of normal windows.
-3. **Confidence** `c_t` = running mean of `z` since the process started
-   (selected). An EWMA `c_t = (1−α)c_{t−1} + α z_t` was also tried.
-4. **Alert** (hysteresis): raised when `c_t > alert_high`, cleared only when
-   `c_t < alert_low = alert_high − 0.25`, so it does not flap on/off.
-5. **Kill** (confidence gate): when `c_t > kill` for **10 consecutive
-   windows** — a single odd window can never kill a process. Final.
-   Optional **alert escalation**: also kill when the alert has stayed on for
-   more than `escalate_after` windows in a row (off by default — see below).
-6. **Action**: `terminate_process(pid)` — `SIGKILL` on Linux/macOS,
-   `taskkill /F` on Windows.
+3. **Confidence** `c_t` = running mean of `z` since the process started.
+4. **Alert** (hysteresis): on when `c_t > alert_high`, off only when
+   `c_t < alert_high − 0.25`, so it does not flap.
+5. **Isolate** (reversible): when `c_t > isolate` for **10 consecutive
+   windows**; released when `c_t < isolate − 0.25`. The process keeps running
+   inside a containment and is still monitored, so it can be released or
+   killed later. (`on_isolate` / `on_release` hooks — in deployment a sandbox
+   such as a cgroup or a network cut.)
+6. **Kill** (final): when `c_t > kill` for **10 consecutive windows** —
+   `SIGKILL` on Linux/macOS, `taskkill /F` on Windows.
 
-## Calibration and tuning (`simulate_response.py`) — FINAL never used for a choice
+A single odd window can never isolate or kill a process.
+
+## Calibration — FINAL never used for a choice
 
 | Parameter | How it is set | Value |
 |---|---|---|
 | Window median / p99 per dataset | benign val windows | `calibration.json` |
-| Kill threshold per dataset | 99th percentile of the highest *sustained* confidence over benign val processes (~1% of normal val processes would ever be killed) | ADFA-LD 1.16, LID-DS 0.95, PLAID 1.12 |
-| Confidence type (α) and sustain | grid α ∈ {running mean, 0.01 … 0.5} × sustain ∈ {1, 5, 10, 25, 50, 100}, picked on **TUNE**: most attacks killed with ≤ 2% TUNE false kills | running mean, 10 windows |
-| Alert threshold | max Youden's J (attacks alerted % + normal not alerted %) on **TUNE** | high 0.338, low 0.088 |
-| Alert escalation | `escalate_after` per dataset = a percentile (99.5 … 90) of the longest continuous alert over benign val processes; percentile or *off* picked on **TUNE** with the same ≤ 2% false-kill rule | **off** |
+| Confidence type and sustain | grid {running mean, EWMA α 0.01–0.5} × sustain {1 … 100}, picked on **TUNE**: most attacks killed with ≤ 2% TUNE normal processes killed | running mean, 10 windows |
+| Kill line per dataset | ~1% of benign val processes would ever be killed | ADFA-LD 1.16, LID-DS 0.95, PLAID 1.12 |
+| Isolate line per dataset | ~2% of benign val processes would ever be isolated (most conservative level tested) | ADFA-LD 1.01, LID-DS 0.88, PLAID 0.82 |
+| Alert line | max Youden's J (attacks alerted % + normal not alerted %) on **TUNE** | 0.338 (off at 0.088) |
 
 ## Results on FINAL (583 normal, 716 attack processes)
 
-| | Layer 5 (online, window by window) | Layer 4 (after the whole recording) |
+| | Attacks | Normal processes |
 |---|---|---|
-| **Kill**: attacks stopped | **123 / 716 (17.2%)** | strict: 107 / 716 |
-| **Kill**: normal processes killed | 8 / 583 (1.4%) | strict: 6 / 583 |
-| **Alert**: attacks alerted | 604 / 716 (84.4%) | balanced: 638 / 716 |
-| **Alert**: normal processes alerted | 244 / 583 (41.9%) | balanced: 202 / 583 |
-| System calls run before the kill (median) | **28** (6.7% of the recording) | whole recording |
+| Alerted | 604 (84.4%) | 244 (41.9%) |
+| **Contained at some point** (isolated or killed) | **164 (22.9%)** | 16 (2.7%) |
+| **Still contained at the end** (killed or still isolated) | **142 (19.8%)** | 9 (8 killed, 1 isolated) |
+| **Killed** (permanent) | **123 (17.2%)** | **8 (1.4%)** |
+| System calls before the first action (median) | 22 (containment), 28 (kill) | — |
 
-- **Online kills more attacks and earlier** than the whole-recording decision:
-  half of the stopped attacks are killed within 28 system calls.
-- **Heartbleed (CVE-2014-0160): 58 / 77 stopped** online (Layer 4 strict:
-  20 / 77) — the exploit's burst at the start is caught before the long normal
-  tail of the process dilutes it. 0 / 65 normal LID-DS CVE-2014-0160
-  processes killed.
-- **Hysteresis**: alert raises on normal processes **253 with vs 352
-  without** (−28%); 869 vs 1,210 over all processes.
-- Per dataset: LID-DS 61 / 81 attacks stopped, PLAID 30 / 117 (nginx 17 / 19),
-  ADFA-LD 32 / 518. Alerts reach ≥ 67% of every attack type.
-- **Live demo** (`response_summary.json → live_demo`): a real dummy process
-  bound to the switch while replaying ADFA-LD Hydra-FTP attack
-  `UAD-Hydra-FTP-1-3523` was actually terminated by `terminate_process` at
-  window 9 (16 system calls).
+- **Isolation adds containment without adding a single kill:** +41 attacks
+  contained (+19 still contained at the end) vs kill-only, while normal
+  processes killed stay at 8. Of the 13 normal processes ever isolated, 7
+  were released automatically, 1 was still isolated at the end and 5 were
+  later killed (they are among the 8 kills, which happen with or without
+  isolation); an isolated normal process spent 18% of its run isolated on
+  average. Of the 102 attacks ever isolated, 61 were later killed, 19 stayed
+  isolated and 22 were released.
+- **Heartbleed (CVE-2014-0160): 58 / 77 killed** online, 0 / 65 normal
+  Heartbleed-scenario processes isolated or killed.
+- Per dataset (contained / killed): LID-DS 61 / 61 of 81, PLAID 50 / 30 of
+  117 (nginx 17/17 of 19, redis 19/12 of 48), ADFA-LD 53 / 32 of 518.
+- **Hysteresis**: alert raises on normal processes 253 with vs 345 without
+  (−27%); 869 vs 1,187 over all processes.
+- **Live demo**: a real dummy process bound to the switch while replaying
+  ADFA-LD Hydra-FTP attack `UAD-Hydra-FTP-1-3523` was terminated at window 9
+  (16 system calls) — `response_summary.json → live_demo`.
 - Check: the vectorised simulation and the `KillSwitch` class give identical
-  kill decisions and kill times on 300 / 300 FINAL processes.
+  kill and isolation decisions on 300 / 300 FINAL processes.
 
-### Alert escalation (option tested, not adopted)
+Against Layer 4 (decides only after the whole recording, same FINAL records):
+strict threshold 107 attacks / 6 normal flagged; balanced 638 / 202.
 
-Idea: an attack that stays alerted for a long time should eventually be
-killed. Result on TUNE (306 attacks, 251 normal processes):
+## Options evaluated (TUNE only) and why this design was kept
 
-| Escalation | Attacks killed | Normal killed | Within ≤ 2% false kills |
+| Option | Idea | TUNE outcome | Kept? |
 |---|---|---|---|
-| **off (selected)** | **46** | **5 (2.0%)** | yes |
-| 99.5th pct | 48 (+2) | 7 (2.8%) | no |
-| 98th pct | 64 (+18) | 11 (4.4%) | no |
-| 95th pct | 90 (+44) | 16 (6.4%) | no |
-| 90th pct | 135 (+89) | 29 (11.6%) | no |
+| EWMA confidence | react to recent windows only | best EWMA setting killed fewer attacks than the running mean | no — running mean selected |
+| Alert escalation | kill when an alert lasts very long | every level broke the 2% kill limit (mildest: +2 attacks for +2 normal kills) | no — removed |
+| **Isolate tier** | reversible containment between alert and kill | +26 attacks stopped (72 vs 46 of 306) with **no extra kills** (5 of 251) | **yes** |
 
-Many normal processes also stay alerted for long stretches, so a long alert
-alone is weak evidence: every extra attack killed costs roughly one extra
-normal process. Escalation therefore only trades false kills for kills (like
-loosening the kill budget) and stays **off**; FINAL results are unchanged.
-It remains available as a policy switch (`Thresholds.escalate_after`) for
-low-risk services where more false kills are acceptable; all settings are in
-`escalation_tuning.csv`.
-
-### Disclosure — first run
-
-The first run offered only EWMA confidence. On FINAL it stopped 62 / 716
-attacks with 14 / 583 false kills (alerts 435 / 716 vs 267 / 583) — worse than
-Layer 4, because an EWMA tracks short spikes and long normal processes have
-thousands of chances to spike, forcing a very high kill line. The running-mean
-option was then added because Layer 4 had found the recording **mean** to be
-the best aggregation; the choice between all options is still made on TUNE
-only. Both families are in `tuning_results.csv`.
+Isolation sensitivity (`isolation_sensitivity.csv`, TUNE): looser isolation
+lines stop more attacks (3% → 97, 5% → 118, 10% → 145 of 306) but isolate
+more normal processes (20, 21, 29 of 251). Normal processes killed stay at 5
+in every case. Disclosure: the pre-set target of ≤ 5% normal processes
+disrupted on TUNE was not met by any level — the most conservative one gives
+5.6% (14 of 251) — so that level is used and reported as is.
 
 ## Outputs (`response/`)
 
 | File | Contents |
 |---|---|
-| `calibration.json` | normalisation, kill thresholds per dataset, alert thresholds, chosen α / sustain |
-| `tuning_results.csv` | all 42 (α, sustain) settings on TUNE + val false-kill rate |
-| `escalation_tuning.csv` | alert-escalation settings on TUNE (off selected) |
-| `kill_log.csv` | one row per FINAL process: alerted / first alert syscall, killed / kill reason / kill syscall, alert raises with & without hysteresis |
-| `per_dataset.csv`, `per_attack_type.csv` | kills, false kills, alerts, time to kill |
+| `calibration.json` | normalisation, alert / isolate / kill lines per dataset, confidence type, sustain |
+| `tuning_results.csv` | all 42 (confidence type, sustain) settings on TUNE |
+| `isolation_sensitivity.csv` | isolation levels on TUNE |
+| `action_log.csv` | one row per FINAL process: alerted, isolated (first syscall, count, share of life, at end), killed (syscall), contained |
+| `per_dataset.csv`, `per_attack_type.csv` | alerts, containment, kills, time to action |
 | `response_summary.json` | totals, hysteresis effect, Layer 4 comparison, live demo |
-| `plots/example_timelines.png` | confidence over time for an attack (killed) and a normal process |
-| `plots/time_to_kill.png` | share of attacks stopped vs system calls executed |
-| `plots/per_attack_response.png` | alerted and killed per attack type |
+| `plots/example_timelines.png` | confidence over time: an attack killed, an attack isolated, a normal process left running |
+| `plots/time_to_action.png` | share of attacks contained / killed vs system calls executed |
+| `plots/per_attack_response.png` | alerted, contained and killed per attack type |
 
 ## Limitations
 
 - Simulated replay of recorded traces; live use needs a syscall stream per
-  process (ptrace/eBPF) feeding `KillSwitch.update`.
-- ADFA-LD Adduser / Meterpreter and PLAID ssh / ftp / cowroot are alerted but
-  rarely killed — they look normal at the syscall-name level.
-- The ~1.4% false-kill rate means roughly 1 in 70 normal processes would be
-  killed; a deployment would whitelist critical services or require operator
-  confirmation for them.
+  process (ptrace/eBPF) feeding `KillSwitch.update`, and a real sandbox
+  behind `on_isolate` / `on_release`.
+- ADFA-LD Adduser / Meterpreter and PLAID ssh are alerted (≥ 67%) but
+  rarely contained — they look normal at the syscall-name level.
+- ~1.4% of normal processes are killed and ~2% isolated; a deployment would
+  whitelist critical services or require operator confirmation for them.

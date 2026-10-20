@@ -26,12 +26,20 @@
     "PLAID": 1.121407901087006
   },
   "kill_calibration": "99.0th percentile of benign val sustained peak confidence",
+  "kill_selection_rule": "most TUNE attacks killed with TUNE benign kill rate <= 0.02; ties -> fewer syscalls before kill",
+  "isolate_threshold_z_per_dataset": {
+    "ADFA-LD": 1.0067579824044142,
+    "LID-DS": 0.8811317069784593,
+    "PLAID": 0.819116860975938
+  },
+  "isolate_release_z_per_dataset": {
+    "ADFA-LD": 0.7567579824044142,
+    "LID-DS": 0.6311317069784593,
+    "PLAID": 0.569116860975938
+  },
+  "isolate_calibration": "98.0th percentile of benign val sustained peak confidence (~2.0% of normal val processes ever isolated)",
   "alert_high_z": 0.33844339233973475,
   "alert_low_z": 0.08844339233973475,
   "hysteresis_gap": 0.25,
-  "alert_calibration": "max Youden's J on TUNE (peak confidence)",
-  "escalate_after_windows_per_dataset": null,
-  "escalation_calibration": "off percentile of the longest continuous alert over benign val processes (min = sustain); percentile chosen on TUNE",
-  "escalation_selection_rule": "most TUNE attacks killed with TUNE benign kill rate <= 0.02",
-  "selection_rule": "most TUNE attacks killed with TUNE benign false-kill rate <= 0.02; ties -> fewer syscalls before kill"
+  "alert_calibration": "max Youden's J on TUNE (peak confidence)"
 }

@@ -1,0 +1,7 @@
+isolate_budget_pct_of_val_normal,used,isolation_lines,tune_attacks_stopped,tune_attacks,tune_normal_disrupted,tune_normal_killed,tune_normal,tune_normal_disrupted_rate
+2.0,True,ADFA-LD 1.01; LID-DS 0.88; PLAID 0.82,72,306,14,5,251,0.055777
+3.0,False,ADFA-LD 0.93; LID-DS 0.71; PLAID 0.70,97,306,20,5,251,0.079681
+4.0,False,ADFA-LD 0.89; LID-DS 0.69; PLAID 0.56,110,306,20,5,251,0.079681
+5.0,False,ADFA-LD 0.84; LID-DS 0.65; PLAID 0.50,118,306,21,5,251,0.083665
+7.0,False,ADFA-LD 0.76; LID-DS 0.63; PLAID 0.47,134,306,26,5,251,0.103586
+10.0,False,ADFA-LD 0.71; LID-DS 0.59; PLAID 0.42,145,306,29,5,251,0.115538

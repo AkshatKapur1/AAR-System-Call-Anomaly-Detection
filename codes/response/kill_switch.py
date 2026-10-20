@@ -1,5 +1,5 @@
 """
-Layer 5: confidence-gated, hysteresis-based per-process kill switch.
+Layer 5: confidence-gated, hysteresis-based graduated response per process.
 
 Consumes the best model's per-window anomaly scores (Layer 4 picked the LSTM
 in `stream` mode) one window at a time, as a running process would produce
@@ -11,17 +11,18 @@ them, and decides per process:
       windows of the process's environment (dataset) -> 0 = typical normal,
       1 = the 99th percentile of normal windows.
 
-  ALERT   raised when c_t > alert_high, cleared only when c_t < alert_low
-          (hysteresis: alert_low < alert_high, so the alert does not flap).
-  KILL    when c_t > kill for `sustain` consecutive windows (confidence gate:
-          a single odd window can never kill a process), OR
-          ESCALATION: when the alert has stayed on for more than
-          `escalate_after` consecutive windows - longer than almost any normal
-          process ever stays alerted. Kill is final.
+Three escalating responses, each with a confidence gate or hysteresis:
+  ALERT    raised when c_t > alert_high, cleared only when c_t < alert_low.
+  ISOLATE  (reversible) when c_t > isolate for `sustain` consecutive windows;
+           released when c_t < isolate_release. The process keeps running
+           inside a containment (e.g. network cut / sandbox) and is still
+           monitored, so it can be released or killed later.
+  KILL     (final) when c_t > kill for `sustain` consecutive windows.
+A single odd window can never isolate or kill a process.
 
 All parameters come from codes/response/simulate_response.py: thresholds are
-calibrated on benign val, alpha / sustain / alert level are chosen on the
-TUNE part of test. Nothing here looks at labels.
+calibrated on benign val, confidence type / sustain / alert level are chosen
+on the TUNE part of test. Nothing here looks at labels.
 """
 import os
 import signal
@@ -37,8 +38,9 @@ class Thresholds:
     p99: float
     alert_high: float
     alert_low: float
+    isolate: float
+    isolate_release: float
     kill: float
-    escalate_after: int = 0     # 0 = no escalation
 
 
 @dataclass
@@ -47,19 +49,22 @@ class KillSwitch:
     sustain: int
     thresholds: Thresholds
     on_alert: callable = None
+    on_isolate: callable = None
+    on_release: callable = None
     on_kill: callable = None
     confidence: float = 0.0
     alert: bool = False
+    isolated: bool = False
     killed: bool = False
     window: int = -1
     run_above_kill: int = 0
+    run_above_isolate: int = 0
     z_sum: float = 0.0
-    alert_run: int = 0
-    kill_reason: str = ""
     events: list = field(default_factory=list)
 
     def update(self, window_score):
-        """Feed one window score; returns 'kill', 'alert', 'clear' or None."""
+        """Feed one window score; returns the most severe event of this window
+        ('kill', 'isolate', 'release', 'alert', 'clear') or None."""
         if self.killed:
             return None
         self.window += 1
@@ -70,35 +75,38 @@ class KillSwitch:
             self.confidence = self.z_sum / (self.window + 1)
         else:
             self.confidence = (1 - self.alpha) * self.confidence + self.alpha * z
+
         self.run_above_kill = self.run_above_kill + 1 if self.confidence > t.kill else 0
         if self.run_above_kill >= self.sustain:
-            return self._kill("confidence")
+            self.killed = True
+            return self._event("kill", self.on_kill)
+
         event = None
+        self.run_above_isolate = self.run_above_isolate + 1 if self.confidence > t.isolate else 0
+        if not self.isolated and self.run_above_isolate >= self.sustain:
+            self.isolated = True
+            event = self._event("isolate", self.on_isolate)
+        elif self.isolated and self.confidence < t.isolate_release:
+            self.isolated = False
+            event = self._event("release", self.on_release)
+
         if not self.alert and self.confidence > t.alert_high:
-            self.alert, event = True, "alert"
-            self.events.append(("alert", self.window, self.confidence))
-            if self.on_alert:
-                self.on_alert(self)
+            self.alert = True
+            event = event or self._event("alert", self.on_alert)
         elif self.alert and self.confidence < t.alert_low:
-            self.alert, event = False, "clear"
-            self.events.append(("clear", self.window, self.confidence))
-        self.alert_run = self.alert_run + 1 if self.alert else 0
-        if t.escalate_after and self.alert_run > t.escalate_after:
-            return self._kill("escalation")
+            self.alert = False
+            event = event or self._event("clear", None)
         return event
 
-    def _kill(self, reason):
-        self.killed = True
-        self.kill_reason = reason
-        self.events.append(("kill:" + reason, self.window, self.confidence))
-        if self.on_kill:
-            self.on_kill(self)
-        return "kill"
+    def _event(self, name, callback):
+        self.events.append((name, self.window, self.confidence))
+        if callback:
+            callback(self)
+        return name
 
 
 def terminate_process(pid):
-    """The actual response action: kill the process (SIGKILL on Linux/macOS,
-    TerminateProcess on Windows)."""
+    """The kill action: SIGKILL on Linux/macOS, TerminateProcess on Windows."""
     if sys.platform == "win32":
         subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
     else:
@@ -106,9 +114,11 @@ def terminate_process(pid):
 
 
 def demo(window_scores, alpha, sustain, thresholds):
-    """End-to-end demo of the action path: start a harmless dummy process,
+    """End-to-end demo of the kill path: start a harmless dummy process,
     replay a recording's window scores into a KillSwitch bound to it, and
-    terminate the process when the switch fires. Returns a short report."""
+    terminate the process when the switch fires. (Isolation is reported as an
+    event; in deployment on_isolate/on_release map to a sandbox, e.g. a cgroup
+    or a network cut.) Returns a short report."""
     proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
     switch = KillSwitch(alpha, sustain, thresholds, on_kill=lambda s: terminate_process(proc.pid))
     for score in window_scores:
